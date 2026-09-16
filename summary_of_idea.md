@@ -1,5 +1,4 @@
-# Federated Mendelian randomisation across two biobanks
-
+# Federated Mendelian randomisation across multiple biobanks
 
 Mendelian randomisation models in a federated manner.
 
