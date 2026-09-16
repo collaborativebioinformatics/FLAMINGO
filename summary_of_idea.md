@@ -1,6 +1,8 @@
 # Federated Mendelian randomisation across two biobanks
 
-Overarching goal: fit (non-linear) Mendelian randomisation models in a federated manner.
+[flowchart.jpeg](flowchart.jpeg)
+
+Overarching goal: fit (non-linear) Or annotated and so forth.Mendelian randomisation models in a federated manner.
 
 - Non-linear Mendelian randomisation models for each local node
 - Federated learning on the shared models
@@ -12,6 +14,18 @@ Overarching goal: fit (non-linear) Mendelian randomisation models in a federated
 | Biobank A | yes | yes | yes | **yes** |
 | Biobank B | yes | yes | yes | no |
 
+Causal diagram (the same at both sites):
+
+```mermaid
+flowchart LR
+    G((G)) --> X((X)) --> Y((Y))
+    C((C)) --> X
+    C --> Y
+```
+
+`G` are the SNPs, `X` the exposure, `Y` the outcome and `C` the confounders of `X` and `Y`.
+The instrument is `S = G·w`; it stands in `G`'s place, so the design needs `S ⊥ C`.
+
 Biobank A uses `C` to build a polygenic risk score (PRS) `S = G·w` that predicts `X`
 but is (approximately) independent of `C`. Biobank B cannot check that independence
 itself, so it relies on the certificate issued by A. Only the weights `w`, the
@@ -22,7 +36,6 @@ certificate, and model parameters ever leave a site; individual-level data stays
 ```mermaid
 flowchart TB
     subgraph A["Biobank A  (G, X, Y, C observed)"]
-        direction TB
         A1["Fit PRS weights w<br/>maximise assoc(G·w, X)<br/>subject to G·w ⊥ C"]
         A2{"Test G·w ⊥ C<br/>on held-out data"}
         A3["Certify w<br/>(test statistic, p-value, sample size)"]
@@ -34,7 +47,6 @@ flowchart TB
     end
 
     subgraph S["Coordinator  (no individual-level data)"]
-        direction TB
         S1["Store w + certificate"]
         S2["Aggregate MR model parameters<br/>(e.g. FedAvg over sites)"]
         S3["Pooled causal effect of X on Y"]
@@ -42,7 +54,6 @@ flowchart TB
     end
 
     subgraph B["Biobank B  (G, X, Y observed, C unobserved)"]
-        direction TB
         B1["Receive w + certificate<br/>(never sees C)"]
         B2["Compute S = G·w locally"]
         B3["Fit local MR model Y ~ f(X), instrument S"]
