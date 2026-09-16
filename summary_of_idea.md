@@ -1,8 +1,7 @@
 # Federated Mendelian randomisation across two biobanks
 
-[flowchart.jpeg](flowchart.jpeg)
 
-Overarching goal: fit (non-linear) Or annotated and so forth.Mendelian randomisation models in a federated manner.
+Mendelian randomisation models in a federated manner.
 
 - Non-linear Mendelian randomisation models for each local node
 - Federated learning on the shared models
