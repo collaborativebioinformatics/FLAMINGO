@@ -42,3 +42,13 @@ with every client's metrics plus a test-size-weighted mean.
 - Case prevalence is 0.3 and `X` alone carries little signal in these
   simulations, so accuracy sits near the majority-class rate (~0.70) and AUC
   near 0.58. That is a property of the data, not the federation.
+
+## Plot
+
+```bash
+uv run python plot_metrics.py                 # results/metrics_by_round.global.png
+uv run python plot_metrics.py --stage local   # results/metrics_by_round.local.png
+```
+
+One panel per metric across rounds: thin gray lines are the ten sites, the
+bold blue line is the test-size-weighted mean.
