@@ -7,6 +7,11 @@ instrument), with site intercepts. Recovers theta1 and theta2.
 Summary-statistic route: per-SNP linear GWAS effects carry only the average
 slope, so the best it can do is the IVW line from federated_summary_mr.py.
 
+Federated-learning route (optional, for contrast): the NVFlare FedAvg MLP
+from ../federated_learning fits E[Y | X] directly, with no instruments, so its
+curve is the confounded association rather than the causal effect. It is read
+from federated_learning/results/<shape>/curves.csv when that file exists.
+
 Writes results/nonlinear.<shape>.png (dose-response curves) and prints the
 coefficient estimates.
 """
@@ -27,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from federated_summary_mr import _first_stage, gwas, ivw  # noqa: E402
 from simulate_basic import causal_curve  # noqa: E402
 
-POOLED_COLOR, SUMSTATS_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1f1f1e", "#6b6a63", "#e6e5df"
+POOLED_COLOR, SUMSTATS_COLOR, FL_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1baf7a", "#1f1f1e", "#6b6a63", "#e6e5df"
 
 
 def load_sites(folder: Path):
@@ -68,12 +73,28 @@ def sumstats_slope(sites):
     return float(np.sum(w * est) / np.sum(w)), float(np.sqrt(1 / np.sum(w)))
 
 
+def federated_curve(path: Path, x):
+    """Last-round global-model f(X) from the NVFlare run, centred at X = 0 and
+    interpolated onto x. Returns (curve, round) or None if the file is missing."""
+    if not path.exists():
+        return None
+    df = pl.read_csv(path)
+    last = df["round"].max()
+    c = df.filter(pl.col("round") == last).group_by("x").agg(pl.col("f").mean()).sort("x")
+    xs, fs = c["x"].to_numpy(), c["f"].to_numpy()
+    fs = fs - np.interp(0.0, xs, fs)
+    return np.interp(x, xs, fs), int(last)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--shape", choices=["quadratic", "threshold"], default="quadratic")
     p.add_argument("--sites", type=Path, default=None)
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument("--federated", type=Path, default=None,
+                   help="curves.csv from the NVFlare run (default: ../federated_learning/results/<shape>/curves.csv)")
     a = p.parse_args()
+    a.federated = a.federated or Path(__file__).resolve().parents[2] / "federated_learning" / "results" / a.shape / "curves.csv"
     a.sites = a.sites or Path("simulated_data/federated") / a.shape
     a.out = a.out or Path("results") / f"nonlinear.{a.shape}.png"
     manifest = json.loads((a.sites / "manifest.json").read_text())
@@ -95,6 +116,7 @@ def main():
     fit = basis @ theta
     fit_se = np.sqrt(np.einsum("ij,jk,ik->i", basis, cov, basis))
     line = slope * x
+    fl = federated_curve(a.federated, x)
 
     fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
     ax.fill_between(x, fit - 1.96 * fit_se, fit + 1.96 * fit_se, color=POOLED_COLOR, alpha=0.18, linewidth=0)
@@ -102,6 +124,12 @@ def main():
     ax.plot(x, fit, color=POOLED_COLOR, linewidth=2,
             label=f"concatenated: quadratic 2SLS  θ1={theta[0]:.2f}, θ2={theta[1]:.2f} (95% band)")
     ax.plot(x, line, color=SUMSTATS_COLOR, linewidth=2, label=f"sumstats: linear IVW  slope={slope:.2f}")
+    if fl is not None:
+        ax.plot(x, fl[0], color=FL_COLOR, linewidth=2, linestyle=(0, (5, 2)),
+                label=f"federated learning: NVFlare MLP, E[Y | X] after round {fl[1]} (no instruments, confounded)")
+        print(f"federated MLP curve:          from {a.federated}")
+    else:
+        print(f"no federated curve at {a.federated}; run federated_learning/job.py --dataset {a.shape} to add it")
     X_all = np.concatenate([s[1] for s in sites])
     ax2 = ax.twinx()
     ax2.hist(X_all, bins=60, color=GRID, alpha=0.6, zorder=0)

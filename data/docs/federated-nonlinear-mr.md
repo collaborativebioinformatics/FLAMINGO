@@ -49,6 +49,20 @@ overshoots below `X = -1.5`, but it says the effect saturates and the
 sumstats line cannot. A piecewise or stratified IV fit on the pooled data
 would locate the cutoff.
 
+## Federated learning for contrast
+
+The plots also carry a green dashed line: the NVFlare FedAvg MLP from
+`../federated_learning/` (`job.py --dataset quadratic|threshold`), which
+fits `E[Y | X]` directly across the ten sites with no instruments. It
+recovers the *shape* of the association well, quadratic curvature and the
+threshold kink alike, because federated averaging of a flexible model sees
+individual-level data at every site. But it is the confounded regression,
+not the causal curve: `U` pushes both `X` and `Y`, so the MLP sits above
+the truth for large `X` on the threshold set and below it for negative `X`
+on the quadratic set. Federation solves the data-access problem; only the
+instruments solve the confounding problem. The line is read from
+`federated_learning/results/<shape>/curves.csv` when present.
+
 ## What this shows
 
 Federation by summary statistics loses nothing for a linear effect and loses
