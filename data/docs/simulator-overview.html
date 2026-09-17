@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MR Simulator — how it works</title>
+<style>
+  :root {
+    --bg0: #0b1020;
+    --bg1: #131a30;
+    --panel: rgba(255,255,255,0.045);
+    --panel-line: rgba(255,255,255,0.09);
+    --ink: #eef1f8;
+    --muted: #97a1b8;
+    --faint: #6b7590;
+    --teal: #45d6c4;
+    --teal-soft: rgba(69,214,196,0.14);
+    --amber: #f5b94d;
+    --amber-soft: rgba(245,185,77,0.14);
+    --violet: #b295f0;
+    --violet-soft: rgba(178,149,240,0.16);
+    --blue: #6fa8ff;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 480px at 12% -10%, rgba(69,214,196,0.16), transparent 60%),
+      radial-gradient(800px 420px at 92% 8%, rgba(178,149,240,0.14), transparent 55%),
+      radial-gradient(700px 500px at 70% 100%, rgba(111,168,255,0.10), transparent 60%),
+      linear-gradient(180deg, var(--bg0), var(--bg1));
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .stage {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 34px 40px 28px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* header */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--teal);
+    margin-bottom: 10px;
+  }
+  .kicker::before {
+    content: "";
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 12px 2px var(--teal);
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(1.7rem, 3vw, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    background: linear-gradient(100deg, #ffffff 20%, #b9d8ff 55%, #cdbcf9 90%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p.sub {
+    margin: 0;
+    color: var(--muted);
+    max-width: 56ch;
+    font-size: 0.97rem;
+  }
+  .pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .pill {
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    padding: 6px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill b { color: var(--teal); font-weight: 700; }
+
+  /* flow */
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1.15fr;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 26px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 20px;
+  }
+  .flow-node {
+    text-align: center;
+    padding: 14px 10px;
+    border-radius: 14px;
+  }
+  .flow-node .lbl {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1.05rem;
+  }
+  .flow-node .cap {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .flow-node.g { background: rgba(111,168,255,0.10); }
+  .flow-node.g .lbl { color: var(--blue); }
+  .flow-node.x { background: rgba(255,255,255,0.05); }
+  .flow-node.x .lbl { color: var(--ink); }
+  .flow-node.y {
+    background: linear-gradient(120deg, var(--teal-soft), var(--amber-soft) 50%, var(--violet-soft));
+    border: 1px dashed rgba(255,255,255,0.18);
+  }
+  .flow-node.y .lbl { color: var(--ink); font-size: 0.95rem; }
+  .flow-arrow { color: var(--faint); font-size: 1.4rem; }
+
+  /* bento grid */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 14px;
+    flex: 1;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 18px;
+    padding: 18px 20px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.18);
+    box-shadow: 0 16px 40px -18px rgba(0,0,0,0.6);
+  }
+  .card h3 {
+    margin: 0 0 6px;
+    font-size: 0.98rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p { margin: 0; font-size: 0.83rem; color: var(--muted); line-height: 1.5; }
+  .card .eqchip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    background: rgba(0,0,0,0.28);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-top: 10px;
+    color: #dfe6f5;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: none;
+  }
+
+  .span-7 { grid-column: span 7; }
+  .span-5 { grid-column: span 5; }
+  .span-4 { grid-column: span 4; }
+  .span-6 { grid-column: span 6; }
+
+  /* outcome cards */
+  .outcome-card { border-top: 3px solid transparent; }
+  .outcome-card.continuous { border-top-color: var(--teal); }
+  .outcome-card.binary { border-top-color: var(--amber); }
+  .outcome-card.survival { border-top-color: var(--violet); }
+  .outcome-tag {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .outcome-card.continuous .outcome-tag { background: var(--teal-soft); color: var(--teal); }
+  .outcome-card.binary .outcome-tag { background: var(--amber-soft); color: var(--amber); }
+  .outcome-card.survival .outcome-tag { background: var(--violet-soft); color: var(--violet); }
+
+  /* shape icons */
+  .shapes { display: flex; gap: 14px; margin-top: 10px; }
+  .shape { text-align: center; flex: 1; }
+  .shape svg { width: 100%; height: 40px; }
+  .shape span { display: block; font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+
+  /* population dots */
+  .pop-row { display: flex; align-items: flex-end; gap: 6px; height: 34px; margin-top: 12px; }
+  .pop-row i {
+    display: block; border-radius: 3px 3px 1px 1px;
+    background: linear-gradient(180deg, var(--blue), rgba(111,168,255,0.25));
+    width: 100%;
+  }
+
+  /* architecture pipe */
+  .pipe {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-top: 12px; font-family: var(--mono); font-size: 0.72rem;
+  }
+  .pipe .step {
+    background: rgba(0,0,0,0.28); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 5px 9px; color: #dfe6f5;
+  }
+  .pipe .sep { color: var(--faint); }
+
+  footer {
+    text-align: center;
+    color: var(--faint);
+    font-size: 0.72rem;
+    padding-top: 4px;
+  }
+  footer code { font-family: var(--mono); color: var(--muted); }
+
+  @media (max-width: 980px) {
+    .flow { grid-template-columns: 1fr; }
+    .flow-arrow { transform: rotate(90deg); }
+    .span-7, .span-5, .span-4, .span-6 { grid-column: span 12; }
+    .bento { grid-template-columns: 1fr; }
+    header { flex-direction: column; align-items: flex-start; }
+    .pills { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <header>
+    <div>
+      <div class="kicker">Simulation engine</div>
+      <h1>One exposure model.<br>Three outcome types. Any number of sites.</h1>
+      <p class="sub">A synthetic Mendelian-randomization generator: SNPs and a hidden
+        confounder produce one exposure, which any of three pluggable outcome
+        simulators can turn into continuous, binary, or survival data — for a
+        single cohort or a federation of them.</p>
+    </div>
+    <div class="pills">
+      <span class="pill"><b>3</b> outcome types</span>
+      <span class="pill"><b>3</b> causal shapes</span>
+      <span class="pill"><b>10</b> federated sites</span>
+      <span class="pill"><b>1</b> shared causal curve</span>
+    </div>
+  </header>
+
+  <div class="flow">
+    <div class="flow-node g">
+      <div class="lbl">G, U</div>
+      <div class="cap">SNP instruments + hidden confounder</div>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-node x">
+      <div class="lbl">X</div>
+      <div class="cap">exposure — one model, every outcome type</div>
+    </div>
+    <div class="flow-arrow">&#8594;</div>
+    <div class="flow-node y">
+      <div class="lbl">continuous · binary · survival</div>
+      <div class="cap">outcome — swapped via a pluggable interface</div>
+    </div>
+  </div>
+
+  <div class="bento">
+
+    <div class="card span-7">
+      <h3><span class="dot" style="background:var(--blue)"></span>The shared exposure</h3>
+      <p>Every dataset starts here, no matter what outcome comes next: independent
+        SNP instruments plus one confounder <code>U</code> combine into a single
+        exposure <code>X</code>. <code>h2_x</code> sets how much of X the
+        instruments explain; <code>gamma_x</code> sets how much U leaks in.</p>
+      <div class="eqchip">X&nbsp;=&nbsp;&Sigma;&nbsp;&beta;<sub>j</sub>G<sub>j</sub>&nbsp;+&nbsp;&gamma;<sub>x</sub>U&nbsp;+&nbsp;e<sub>x</sub>&nbsp;&nbsp;&middot;&nbsp;&nbsp;Var(X)=1</div>
+    </div>
+
+    <div class="card span-5">
+      <h3><span class="dot" style="background:#dfe6f5"></span>Any causal shape</h3>
+      <p>The same exposure can drive a flat, curved, or capped effect on the
+        outcome — set with one flag, shared across every site in a federation.</p>
+      <div class="shapes">
+        <div class="shape">
+          <svg viewBox="0 0 60 40"><path d="M6,34 L54,6" fill="none" stroke="#6fa8ff" stroke-width="3" stroke-linecap="round"/></svg>
+          <span>linear</span>
+        </div>
+        <div class="shape">
+          <svg viewBox="0 0 60 40"><path d="M6,34 Q30,-4 54,8" fill="none" stroke="#45d6c4" stroke-width="3" stroke-linecap="round"/></svg>
+          <span>quadratic</span>
+        </div>
+        <div class="shape">
+          <svg viewBox="0 0 60 40"><path d="M6,34 L32,10 L54,10" fill="none" stroke="#b295f0" stroke-width="3" stroke-linecap="round"/></svg>
+          <span>threshold</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card span-4 outcome-card continuous">
+      <h3>Continuous <span class="outcome-tag">default</span></h3>
+      <p>The exposure's effect plus confounding and Gaussian noise — the
+        textbook MR target for 2SLS/IVW-style estimators.</p>
+      <div class="eqchip">Y&nbsp;=&nbsp;f(X)&nbsp;+&nbsp;&gamma;<sub>y</sub>U&nbsp;+&nbsp;e<sub>y</sub></div>
+    </div>
+
+    <div class="card span-4 outcome-card binary">
+      <h3>Binary <span class="outcome-tag">case / control</span></h3>
+      <p>The same signal as a liability, collapsed to 0/1 by a threshold or a
+        logistic link — prevalence is a dial, not an accident.</p>
+      <div class="eqchip">Y&nbsp;=&nbsp;1{liability&nbsp;&gt;&nbsp;cutoff}</div>
+    </div>
+
+    <div class="card span-4 outcome-card survival">
+      <h3>Survival <span class="outcome-tag">time-to-event</span></h3>
+      <p>Cox proportional hazards over a Weibull baseline, with censoring —
+        theta becomes a log hazard ratio instead of a mean shift.</p>
+      <div class="eqchip">h(t)&nbsp;=&nbsp;h&#8320;(t)&middot;exp(&theta;X&nbsp;+&nbsp;&gamma;<sub>y</sub>U)</div>
+    </div>
+
+    <div class="card span-6">
+      <h3><span class="dot" style="background:var(--teal)"></span>Federated, not identical</h3>
+      <p>Ten sites share one causal curve — the biology — while population size,
+        instrument strength, and confounding vary independently per site, like
+        real biobanks across countries.</p>
+      <div class="pop-row">
+        <i style="height:22%"></i><i style="height:38%"></i><i style="height:52%"></i><i style="height:44%"></i>
+        <i style="height:60%"></i><i style="height:70%"></i><i style="height:58%"></i><i style="height:82%"></i>
+        <i style="height:90%"></i><i style="height:100%"></i>
+      </div>
+    </div>
+
+    <div class="card span-6">
+      <h3><span class="dot" style="background:var(--violet)"></span>Pluggable by design</h3>
+      <p>The site orchestrator never touches outcome logic — it just calls
+        whatever the registry hands it. New outcome type, zero shared-file edits.</p>
+      <div class="pipe">
+        <span class="step">n, h2_x, &gamma;x, &gamma;y, seed</span>
+        <span class="sep">&#8594;</span>
+        <span class="step">sim_fn(...)</span>
+        <span class="sep">&#8594;</span>
+        <span class="step">(df, truth)</span>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Built from <code>data/scripts/*.py</code> — see <code>mr-simulation-model.md</code> for the full design notes.</footer>
+</div>
+</body>
+</html>
