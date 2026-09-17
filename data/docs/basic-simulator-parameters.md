@@ -105,8 +105,9 @@ of this simulator.
 ## Multiple sites, one causal curve: `simulate_federated_sites.py`
 
 For federation experiments, `scripts/simulate_federated_sites.py` calls
-`simulate_nonlinear()` once per site with a fixed `theta1`, `theta2` (the
-quadratic curve is biology, shared across every site) but per-site draws of
+the generator chosen by `--shape` (linear, quadratic, threshold or cox) once
+per site with a fixed `theta1`, `theta2` (the causal curve is biology, shared
+across every site) but per-site draws of
 the nuisance parameters, mimicking biobanks in different countries:
 
 | Parameter | Distribution | Rationale |
@@ -120,11 +121,11 @@ gamma_x^2` in `simulate_basic.py` never goes negative.
 
 Each site gets its own seed (`--seed + site index`), so SNP MAFs/betas and
 individuals differ across sites even though `theta1`/`theta2` don't. Writes
-`simulated_data/<out>/site01.csv` .. `site10.csv` (+ matching
+`simulated_data/federated/<shape>/site01.csv` .. `site10.csv` (+ matching
 `.truth.json`) and a `manifest.{csv,json}` with the sampled `n`, `h2_x`,
 `gamma_x`, `gamma_y`, `avg_slope` per site.
 
 ```bash
-uv run python scripts/simulate_federated_sites.py            # 10 sites, defaults above
+uv run python scripts/simulate_federated_sites.py --shape cox   # 10 sites, defaults above
 uv run python scripts/simulate_federated_sites.py --help     # all knobs
 ```
