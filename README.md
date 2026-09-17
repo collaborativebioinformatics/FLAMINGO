@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/flamingo-logo-dark-rounded.png" alt="FLAMINGO logo" width="200">
+</p>
+
 # FLAMINGO - Federated Non-Linear Mendelian Randomization
 # Purpose
 
