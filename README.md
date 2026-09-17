@@ -1,5 +1,4 @@
-# FLAMINGO - **F**ederated **L**earning **A**nd **M**endelian **I**nference of **N**on-linear **G**enetic **O**utcomes
-
+# FLAMINGO - Federated Non-Linear Mendelian Randomization
 # Purpose
 
 The purpose of this work is to demonstrate the utility of federated learning for non-linear mendelian randomization. Here we created our own synthetic dataset to simulate learning across bio-banks and compare it with conventional MR.
