@@ -93,3 +93,6 @@ The "predicts `X`" part of the PRS fit only needs `(G, X)`, which both sites hav
 step could itself be federated (both sites contribute gradients of the prediction loss),
 while the independence penalty is contributed by A alone. The chart above keeps the PRS
 fit entirely at A for simplicity.
+
+
+![alt text](flowchart.jpeg)
