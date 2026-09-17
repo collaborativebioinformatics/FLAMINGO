@@ -17,15 +17,27 @@ import numpy as np
 import polars as pl
 
 
-def _draw_exposure(rng, n, n_snps, h2_x, gamma_x):
-    """Draw SNPs, confounder U and exposure X. Shared by the linear and non-linear models."""
-    maf = rng.uniform(0.05, 0.5, n_snps)
+def _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf=None, beta=None):
+    """Draw SNPs, confounder U and exposure X. Shared by the linear and non-linear models.
+
+    maf and beta default to fresh draws (site-specific variants). Pass both to
+    reuse harmonized SNPs across sites: beta is then used as given, and h2_x is
+    replaced by the variance those effects explain at these allele frequencies.
+    Returns the h2_x actually used as the last element.
+    """
+    if maf is None:
+        maf = rng.uniform(0.05, 0.5, n_snps)
+    maf = np.asarray(maf, dtype=float)
     G = rng.binomial(2, maf, size=(n, n_snps)).astype(np.int8)
 
-    # Per-SNP effects scaled so the instruments explain h2_x of Var(X) = 1.
-    beta = rng.normal(0.0, 1.0, n_snps)
     var_g = 2 * maf * (1 - maf)
-    beta *= np.sqrt(h2_x / np.sum(beta**2 * var_g))
+    if beta is None:
+        # Per-SNP effects scaled so the instruments explain h2_x of Var(X) = 1.
+        beta = rng.normal(0.0, 1.0, n_snps)
+        beta *= np.sqrt(h2_x / np.sum(beta**2 * var_g))
+    else:
+        beta = np.asarray(beta, dtype=float)
+        h2_x = float(np.sum(beta**2 * var_g))
     gx = (G - 2 * maf) @ beta
 
     U = rng.normal(0.0, 1.0, n)
@@ -34,7 +46,20 @@ def _draw_exposure(rng, n, n_snps, h2_x, gamma_x):
         raise ValueError(f"h2_x + gamma_x^2 must be < 1 so Var(X) = 1 is attainable; got {h2_x} + {gamma_x}^2")
     e_x = rng.normal(0.0, np.sqrt(resid_var), n)
     X = gx + gamma_x * U + e_x
-    return G, maf, beta, U, X
+    return G, maf, beta, U, X, h2_x
+
+
+def scaled_beta(rng, maf, h2_x):
+    """Per-SNP effects explaining h2_x of Var(X) = 1 at allele frequencies maf (for shared SNPs)."""
+    beta = rng.normal(0.0, 1.0, len(maf))
+    return beta * np.sqrt(h2_x / np.sum(beta**2 * 2 * maf * (1 - maf)))
+
+
+def _pleiotropy(G, maf, alpha):
+    """Direct G -> Y effects (horizontal pleiotropy), centred so they do not shift E[Y]."""
+    if alpha is None:
+        return 0.0
+    return (G - 2 * maf) @ np.asarray(alpha, dtype=float)
 
 
 def _frame(n, G, U, X, Y):
@@ -42,17 +67,18 @@ def _frame(n, G, U, X, Y):
     return pl.DataFrame({"id": np.arange(n), **snp_cols, "U": U, "X": X, "Y": Y})
 
 
-def simulate(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed):
-    """Linear model: Y = theta X + gamma_y U + e_y."""
+def simulate(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed, maf=None, beta=None, alpha=None):
+    """Linear model: Y = theta X + sum_j alpha_j G_j + gamma_y U + e_y (alpha = 0 unless given)."""
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
     e_y = rng.normal(0.0, 1.0, n)
-    Y = theta * X + gamma_y * U + e_y
+    Y = theta * X + _pleiotropy(G, maf, alpha) + gamma_y * U + e_y
     truth = {
         "model": "linear",
         "n": n, "n_snps": n_snps, "theta": theta, "h2_x": h2_x,
         "gamma_x": gamma_x, "gamma_y": gamma_y, "seed": seed,
         "maf": maf.tolist(), "beta": beta.tolist(),
+        **({"alpha": list(map(float, alpha))} if alpha is not None else {}),
     }
     return _frame(n, G, U, X, Y), truth
 
@@ -70,7 +96,8 @@ def causal_curve(shape, x, theta1, theta2):
     raise ValueError(f"unknown shape {shape!r}; use 'quadratic' or 'threshold'")
 
 
-def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed):
+def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed,
+                       maf=None, beta=None, alpha=None):
     """Non-linear model: Y = f(X) + gamma_y U + e_y, with f from causal_curve().
 
     Same SNPs, confounder and exposure as simulate(); only the X -> Y link differs.
@@ -78,9 +105,9 @@ def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y,
     linear MR estimator targets when the true curve is not a line.
     """
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
     e_y = rng.normal(0.0, 1.0, n)
-    Y = causal_curve(shape, X, theta1, theta2) + gamma_y * U + e_y
+    Y = causal_curve(shape, X, theta1, theta2) + _pleiotropy(G, maf, alpha) + gamma_y * U + e_y
 
     if shape == "quadratic":
         avg_slope = theta1 + 2 * theta2 * X.mean()
@@ -91,6 +118,7 @@ def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y,
         "n": n, "n_snps": n_snps, "h2_x": h2_x,
         "gamma_x": gamma_x, "gamma_y": gamma_y, "seed": seed,
         "maf": maf.tolist(), "beta": beta.tolist(),
+        **({"alpha": list(map(float, alpha))} if alpha is not None else {}),
     }
     return _frame(n, G, U, X, Y), truth
 
@@ -106,7 +134,7 @@ def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
     Columns `time` and `event` replace `Y`.
     """
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
     lp = theta * X + gamma_y * U
     T = weibull_scale * (-np.log(rng.uniform(size=n)) / np.exp(lp)) ** (1.0 / weibull_k)
 

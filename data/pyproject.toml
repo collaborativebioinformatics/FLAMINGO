@@ -3,6 +3,7 @@ name = "team10-data"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "flamingo-fedmr",
     "lifelines>=0.30.3",
     "matplotlib>=3.11.2",
     "numpy>=2.5.3",
@@ -13,3 +14,6 @@ dependencies = [
 dev = [
     "pytest>=9.1.1",
 ]
+
+[tool.uv.sources]
+flamingo-fedmr = { path = "../fedmr", editable = true }

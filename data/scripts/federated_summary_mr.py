@@ -226,7 +226,7 @@ def fedmr_row(dataset: str, curved: bool):
     if not path.exists():
         return None
     df = pl.read_csv(path)
-    r = df.filter(pl.col("estimator") == ("FedMR quadratic" if curved else "FedMR"))
+    r = df.filter(pl.col("estimator") == "FedMR quadratic" if curved else pl.col("estimator").str.starts_with("FedMR ("))
     if r.height == 0:
         return None
     r = r.row(0, named=True)

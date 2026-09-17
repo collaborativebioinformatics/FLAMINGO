@@ -1,0 +1,8 @@
+estimator,theta1,se1,robust_se1,theta2,se2,robust_se2,first_stage_F,partial_r2,abs_diff_from_pooled,rounds,what_leaves_site
+concatenated 2SLS (one shared first stage),0.3061824018282311,0.014181457921758291,,,,,,,,,individual rows
+concatenated 2SLS (per-site first stages),0.3080153953970694,0.013977919074407525,,,,,,,0.0018329935688383148,,"individual rows; a different estimator, for contrast"
+FedMR (SharedInstrument),0.3061824018282311,0.014181457921758294,0.014165894135080615,,,,301.1349871122493,0.09845082636484004,0.0,2,"centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n; then H for the robust SE"
+FedMR-CF (5 folds),0.3067286021239593,0.01425451331470678,0.014232947538132167,,,,5955.970152522808,0.09743604398617482,,3,"per-fold first-stage moments, then the same statistics"
+site 2SLS meta-analysis,0.30821327312413166,0.01395942075632191,,,,,,,0.0020308712959005715,,one estimate and SE per site
+per-SNP sumstats IVW,0.30881703559156437,0.014823816708765597,,,,,,,0.002634633763333283,,"per-SNP beta_x, beta_y, SEs"
+naive OLS (no instruments),0.3909466833065016,,,,,,,,,,""

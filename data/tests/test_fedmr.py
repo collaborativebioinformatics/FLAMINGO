@@ -1,4 +1,9 @@
-"""FedMR must equal the pooled fits in federated_summary_mr.py to machine precision."""
+"""FedMR must equal pooled 2SLS to machine precision.
+
+The references are direct stacked-data projections written out here, not
+another call through the package's matrix helpers, plus the repo's own
+pooled_2sls / quadratic_2sls for the local-first-stage protocol.
+"""
 
 import sys
 from pathlib import Path
@@ -6,9 +11,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import flamingo_fedmr as fm
+from flamingo_fedmr.protocols import design_generated, design_shared, local_first_stage
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
-import fedmr  # noqa: E402
 from federated_summary_mr import pooled_2sls, quadratic_2sls  # noqa: E402
 
 FED = HERE.parent / "simulated_data" / "federated"
@@ -20,120 +27,196 @@ def raw(sites):
     return [(s.G, s.X, s.Y) for s in sites]
 
 
-@pytest.fixture(scope="module", params=CONTINUOUS)
-def sites(request):
-    return fedmr.load_sites(FED / request.param)
-
-
-def test_linear_identity_with_pooled_2sls(sites):
-    res = fedmr.fedmr(sites, instruments="site", basis="linear")
-    pooled, pooled_se, _ = pooled_2sls(raw(sites))
-    assert abs(res["X"] - pooled) < TOL
-    assert abs(res.se("X") - pooled_se) < TOL
-
-
-def test_quadratic_identity_with_quadratic_2sls(sites):
-    res = fedmr.fedmr(sites, instruments="site", basis="quadratic")
-    theta, cov = quadratic_2sls(raw(sites))
-    assert abs(res["X"] - theta[0]) < TOL and abs(res["X2"] - theta[1]) < TOL
-    assert abs(res.se("X") - np.sqrt(cov[0, 0])) < TOL and abs(res.se("X2") - np.sqrt(cov[1, 1])) < TOL
-
-
-def test_robust_cov_equals_stacked_hc0(sites):
-    res = fedmr.fedmr(sites, instruments="site", basis="linear", robust=True)
-    designs = [fedmr.build_design(s, "site", "linear") for s in sites]
-    stats = fedmr.aggregate([fedmr.stats_from_design(s.name, d) for s, d in zip(sites, designs)])
-    zi = {nm: i for i, nm in enumerate(stats.z_names)}
-    wi = {nm: i for i, nm in enumerate(stats.w_names)}
-    Z = np.zeros((stats.N, len(stats.z_names)))
-    W = np.zeros((stats.N, len(stats.w_names)))
-    Y = np.concatenate([d.Y for d in designs])
-    row = 0
-    for d in designs:
-        Z[row:row + len(d.Y), [zi[n] for n in d.z_names]] = d.Z
-        W[row:row + len(d.Y), [wi[n] for n in d.w_names]] = d.W
-        row += len(d.Y)
-    P = Z @ np.linalg.solve(Z.T @ Z, Z.T @ W)          # projected regressors
-    theta = np.linalg.solve(P.T @ P, P.T @ Y)
-    u = Y - W @ theta
-    bread = np.linalg.inv(P.T @ P)
-    V = bread @ (P.T @ (P * (u**2)[:, None])) @ bread
-    assert np.allclose(res.theta, theta, atol=TOL)
-    assert np.allclose(res.robust_cov, V, atol=TOL)
-
-
-def test_partial_f_equals_nested_regression(sites):
-    designs = [fedmr.build_design(s, "site", "linear") for s in sites]
-    stats = fedmr.aggregate([fedmr.stats_from_design(s.name, d) for s, d in zip(sites, designs)])
-    diag = fedmr.first_stage_diagnostics(stats)["X"]
-    # direct: X on [site consts, site SNPs] versus X on site consts only
-    X = np.concatenate([s.X for s in sites])
-    K = len(sites)
-    S = np.zeros((len(X), K))
-    G = np.zeros((len(X), K * sites[0].G.shape[1]))
-    row = 0
-    for k, s in enumerate(sites):
-        S[row:row + s.n, k] = 1
-        G[row:row + s.n, k * s.G.shape[1]:(k + 1) * s.G.shape[1]] = s.G
-        row += s.n
-    rss = lambda Z: float(np.sum((X - Z @ np.linalg.lstsq(Z, X, rcond=None)[0]) ** 2))
-    rss_r, rss_f = rss(S), rss(np.column_stack([S, G]))
-    m, df2 = G.shape[1], len(X) - S.shape[1] - G.shape[1]
-    assert abs(diag["F"] - ((rss_r - rss_f) / m) / (rss_f / df2)) < 1e-8
-    assert abs(diag["partial_r2"] - (rss_r - rss_f) / rss_r) < TOL
-
-
-def test_invariant_to_site_order_and_splitting(sites):
-    a = fedmr.fedmr(sites, robust=True)
-    b = fedmr.fedmr(sites[::-1], robust=True)
-    assert abs(a["X"] - b["X"]) < TOL and abs(a.se("X", True) - b.se("X", True)) < TOL
-    # splitting site01 into two halves that keep their own name-prefixed instrument columns
-    # is a different model (two first stages); splitting under *shared* names must be invariant
-    s0 = sites[0]
-    h = s0.n // 2
-    half1 = fedmr.SiteData(s0.name, s0.G[:h], s0.X[:h], s0.Y[:h])
-    half2 = fedmr.SiteData(s0.name, s0.G[h:], s0.X[h:], s0.Y[h:])
-    whole = fedmr.aggregate([fedmr.site_stats(s0)])
-    split = fedmr.aggregate([fedmr.site_stats(half1), fedmr.site_stats(half2)])
-    assert np.allclose(whole.A, split.A, atol=TOL) and np.allclose(whole.c, split.c, atol=TOL)
-    assert abs(fedmr.fit(whole)["X"] - fedmr.fit(split)["X"]) < TOL
-
-
-def test_shared_layout_equals_stacked_2sls():
-    """With shared SNP names, FedMR must equal 2SLS on the stacked data with one G and site dummies."""
-    rng = np.random.default_rng(0)
-    m, sites = 5, []
-    for k in range(3):
-        n = 400 + 100 * k
-        G = rng.binomial(2, 0.3, size=(n, m)).astype(float)
-        U = rng.normal(size=n)
-        X = G @ np.full(m, 0.2) + 0.5 * U + rng.normal(size=n)
-        Y = 0.3 * X + 0.5 * U + rng.normal(size=n) + k
-        sites.append(fedmr.SiteData(f"site{k}", G, X, Y))
-    res = fedmr.fedmr(sites, instruments="shared", basis="linear")
-    G = np.vstack([s.G for s in sites]); X = np.concatenate([s.X for s in sites]); Y = np.concatenate([s.Y for s in sites])
-    S = np.zeros((len(X), 3)); row = 0
-    for k, s in enumerate(sites):
-        S[row:row + s.n, k] = 1; row += s.n
-    Z, W = np.column_stack([G, S]), np.column_stack([X, S])
+def stacked_2sls(Z, W, Y, absorbed):
+    """Reference 2SLS on stacked rows: projection, coefficients, classical and HC0 covariance."""
     P = Z @ np.linalg.lstsq(Z, W, rcond=None)[0]
     theta = np.linalg.lstsq(P, Y, rcond=None)[0]
+    u = Y - W @ theta
+    sigma2 = u @ u / (len(Y) - W.shape[1] - absorbed)
+    bread = np.linalg.inv(P.T @ P)
+    return theta, sigma2 * bread, bread @ (P.T @ (P * (u**2)[:, None])) @ bread, sigma2
+
+
+def stack_with_dummies(sites, z_of, w_of):
+    """Stack sites with explicit site dummies in both Z and W (the un-centred formulation)."""
+    K = len(sites)
+    Z, W, Y = [], [], []
+    for k, s in enumerate(sites):
+        S = np.zeros((s.n, K)); S[:, k] = 1
+        Z.append(np.column_stack([z_of(s), S])); W.append(np.column_stack([w_of(s), S])); Y.append(s.Y)
+    return np.vstack(Z), np.vstack(W), np.concatenate(Y)
+
+
+@pytest.fixture(scope="module", params=CONTINUOUS)
+def sites(request):
+    return fm.load_sites(FED / request.param)
+
+
+@pytest.fixture(scope="module")
+def shared_sites():
+    """Small synthetic shared-SNP sites with one aligned covariate, built here so the test
+    does not depend on a checked-in set."""
+    rng = np.random.default_rng(0)
+    m, out = 6, []
+    for k in range(4):
+        n = 300 + 150 * k
+        G = rng.binomial(2, rng.uniform(0.1, 0.5, m), size=(n, m)).astype(float)
+        age = rng.normal(50, 10, n)
+        U = rng.normal(size=n)
+        X = G @ np.linspace(0.1, 0.3, m) + 0.01 * age + 0.5 * U + rng.normal(size=n)
+        Y = 0.3 * X + 0.02 * age + 0.5 * U + rng.normal(size=n) + 2 * k
+        out.append(fm.SiteData(f"site{k}", G, X, Y, age[:, None], ("age",)))
+    return out
+
+
+# --------------------------------------------------------------------------- shared-instrument protocol
+
+
+def test_shared_linear_equals_stacked_2sls_with_dummies(shared_sites):
+    run = fm.SharedInstrumentFedMR(basis="linear", robust=True).run(shared_sites)
+    res = run.result
+    Z, W, Y = stack_with_dummies(shared_sites, lambda s: np.column_stack([s.G, s.C]),
+                                 lambda s: np.column_stack([s.X, s.C]))
+    theta, cov, hc0, sigma2 = stacked_2sls(Z, W, Y, absorbed=0)
+    r = len(res.theta)                                   # X, cov:age; dummies come after
+    assert np.allclose(res.theta, theta[:r], atol=TOL)
+    assert np.allclose(res.cov, cov[:r, :r], atol=TOL)
+    assert np.allclose(res.robust_cov, hc0[:r, :r], atol=TOL)
+    assert abs(res.sigma2 - sigma2) < TOL
+    assert run.rounds == 2 and res.diagnostics.absorbed == len(shared_sites)
+
+
+def test_shared_first_stage_F_equals_nested_regression(shared_sites):
+    run = fm.SharedInstrumentFedMR(basis="linear", robust=False).run(shared_sites)
+    d = run.result.diagnostics.first_stage["X"]
+    Z, W, Y = stack_with_dummies(shared_sites, lambda s: np.column_stack([s.G, s.C]),
+                                 lambda s: np.column_stack([s.X, s.C]))
+    X = W[:, 0]
+    m = shared_sites[0].G.shape[1]
+    exog = Z[:, m:]                                      # covariate + dummies
+    rss = lambda M: float(np.sum((X - M @ np.linalg.lstsq(M, X, rcond=None)[0]) ** 2))
+    rss_r, rss_f = rss(exog), rss(Z)
+    df2 = len(X) - Z.shape[1]
+    assert abs(d["F"] - ((rss_r - rss_f) / m) / (rss_f / df2)) < 1e-8
+    assert abs(d["partial_r2"] - (rss_r - rss_f) / rss_r) < TOL
+    assert d["conditional"] is True and d["df1"] == m and d["df2"] == df2
+
+
+def test_shared_quadratic_equals_stacked_generated_instrument_2sls(shared_sites):
+    run = fm.SharedInstrumentFedMR(basis="quadratic", robust=False).run(shared_sites)
+    assert run.rounds == 2
+    # reference: global first stage with dummies, then 2SLS on [xhat, xhat^2, C, S]
+    Z1, _, _ = stack_with_dummies(shared_sites, lambda s: np.column_stack([s.G, s.C]), lambda s: s.X[:, None])
+    X = np.concatenate([s.X for s in shared_sites])
+    xhat = Z1 @ np.linalg.lstsq(Z1, X, rcond=None)[0]
+    K, row, Zs, Ws = len(shared_sites), 0, [], []
+    for k, s in enumerate(shared_sites):
+        S = np.zeros((s.n, K)); S[:, k] = 1
+        xh = xhat[row:row + s.n]; row += s.n
+        Zs.append(np.column_stack([xh, xh**2, s.C, S])); Ws.append(np.column_stack([s.X, s.X**2, s.C, S]))
+    theta, cov, _, _ = stacked_2sls(np.vstack(Zs), np.vstack(Ws), np.concatenate([s.Y for s in shared_sites]), 0)
+    assert np.allclose(run.result.theta, theta[:3], atol=TOL)
+    assert np.allclose(run.result.cov, cov[:3, :3], atol=TOL)
+    assert run.result.diagnostics.first_stage["X"]["conditional"] is False
+
+
+# --------------------------------------------------------------------------- local-first-stage protocol
+
+
+def test_local_linear_identity_with_pooled_2sls(sites):
+    run = fm.LocalFirstStageFedMR(basis="linear", robust=True).run(sites)
+    pooled, pooled_se, _ = pooled_2sls(raw(sites))
+    assert abs(run.result["X"] - pooled) < TOL
+    assert abs(run.result.se("X") - pooled_se) < TOL
+    assert run.rounds == 2
+
+
+def test_local_quadratic_identity_with_quadratic_2sls(sites):
+    res = fm.LocalFirstStageFedMR(basis="quadratic", robust=False).run(sites).result
+    theta, cov = quadratic_2sls(raw(sites))
+    assert np.allclose(res.theta, theta, atol=TOL)
+    assert np.allclose(res.cov, cov, atol=TOL)
+
+
+def test_local_robust_cov_equals_stacked_hc0(sites):
+    res = fm.LocalFirstStageFedMR(basis="linear", robust=True).run(sites).result
+    Z, W, Y = stack_with_dummies(sites, lambda s: local_first_stage(s)[:, None], lambda s: s.X[:, None])
+    theta, cov, hc0, sigma2 = stacked_2sls(Z, W, Y, absorbed=0)
     assert abs(res["X"] - theta[0]) < TOL
+    assert abs(res.cov[0, 0] - cov[0, 0]) < TOL
+    assert abs(res.robust_cov[0, 0] - hc0[0, 0]) < TOL
+    assert abs(res.sigma2 - sigma2) < TOL and abs(res.rss - sigma2 * res.df_resid) < 1e-6
+
+
+# --------------------------------------------------------------------------- invariances and transport
+
+
+def test_site_order_invariance(sites):
+    a = fm.LocalFirstStageFedMR(robust=True).run(sites).result
+    b = fm.LocalFirstStageFedMR(robust=True).run(sites[::-1]).result
+    assert abs(a["X"] - b["X"]) < TOL and abs(a.se("X", True) - b.se("X", True)) < TOL
+
+
+def test_row_partition_across_transport_clients_is_invariant(sites):
+    """Splitting one logical site's rows across two transport clients, keeping its first
+    stage and design columns, does not change the sums or the fit. (Splitting into two
+    logical sites would not be invariant: that is a different model.)"""
+    d = design_generated(sites[0], local_first_stage(sites[0]), "linear")
+    h = d.n // 2
+    part = lambda sl: fm.Design(d.site, d.Z[sl], d.W[sl], d.Y[sl], d.z_names, d.w_names, d.z_roles, d.w_roles,
+                                absorbed=0)
+    whole = fm.aggregate([fm.site_stats(d)])
+    split = fm.aggregate([fm.site_stats(part(slice(0, h))), fm.site_stats(part(slice(h, None)))])
+    for k in ("A", "B", "c", "D", "e"):
+        assert np.allclose(getattr(whole, k), getattr(split, k), atol=TOL)
+    assert abs(whole.f - split.f) < 1e-6 and whole.N == split.N
 
 
 def test_transport_roundtrip(sites):
-    st = fedmr.site_stats(sites[0])
-    back = fedmr.SiteStats.from_transport(st.arrays(), st.meta())
-    assert back.n == st.n and back.z_names == st.z_names and np.array_equal(back.A, st.A) and back.f == st.f
+    st = fm.site_stats(design_generated(sites[0], local_first_stage(sites[0]), "linear"))
+    back = fm.SiteStats.from_transport(st.arrays(), st.meta())
+    assert back.n == st.n and back.z_names == st.z_names and back.z_roles == st.z_roles
+    assert np.array_equal(back.A, st.A) and back.f == st.f and back.absorbed == st.absorbed
 
 
-def test_oracle_column_rejected():
+def test_oracle_column_rejected_by_loader():
     with pytest.raises(ValueError):
-        fedmr.SiteData("s", np.zeros((3, 1)), np.zeros(3), np.zeros(3), np.zeros((3, 1)), ("U",))
+        fm.load_site_csv(FED / CONTINUOUS[0] / "site01.csv", covariates=("U",))
 
 
-def test_crossfit_runs_and_is_close(sites):
-    plain = fedmr.fedmr(sites)
-    cf = fedmr.fedmr(sites, crossfit=5)
-    assert abs(cf["X"] - plain["X"]) < 0.1
-    assert np.isfinite(cf.se("X")) and cf.se("X") > 0
+def test_under_identification_raises(shared_sites):
+    s = shared_sites[0]
+    d = fm.Design(s.name, np.empty((s.n, 0)), s.X[:, None] - s.X.mean(), s.Y - s.Y.mean(), [], ["X"], [],
+                  [fm.Role.ENDOGENOUS])
+    with pytest.raises(fm.IdentificationError):
+        fm.fit(fm.aggregate([fm.site_stats(d)]))
+
+
+def test_collinear_instruments_raise(shared_sites):
+    s = shared_sites[0]
+    d = design_shared(s)
+    Z = np.column_stack([d.Z, d.Z[:, :1]])
+    bad = fm.Design(s.name, Z, d.W, d.Y, d.z_names + ["dup"], d.w_names, d.z_roles + [fm.Role.INSTRUMENT], d.w_roles)
+    with pytest.raises(fm.IdentificationError):
+        fm.fit(fm.aggregate([fm.site_stats(bad)]))
+
+
+# --------------------------------------------------------------------------- cross-fitting
+
+
+def test_crossfit_is_generated_instrument_iv_not_regression(sites):
+    """The estimating equation sum xhat_oof (Y - theta X) = 0: theta = xhat_oof'Y / xhat_oof'X
+    within site, not the OLS slope of Y on xhat_oof."""
+    from flamingo_fedmr.protocols import crossfit_xhat_local, fold_ids
+    res = fm.LocalFirstStageFedMR(crossfit=5, robust=False).run(sites).result
+    num = den = 0.0
+    for i, s in enumerate(sites):
+        xh = crossfit_xhat_local(s, fold_ids(s.n, 5, i), 5)
+        xh_c, X_c, Y_c = xh - xh.mean(), s.X - s.X.mean(), s.Y - s.Y.mean()
+        num += xh_c @ Y_c; den += xh_c @ X_c
+    assert abs(res["X"] - num / den) < TOL
+
+
+def test_shared_crossfit_runs(shared_sites):
+    run = fm.SharedInstrumentFedMR(crossfit=4, robust=True).run(shared_sites)
+    assert run.rounds == 3 and np.isfinite(run.result.se("X", True))

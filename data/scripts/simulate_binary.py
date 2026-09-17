@@ -23,7 +23,7 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from simulate_basic import _draw_exposure, _frame, causal_curve  # noqa: E402
+from simulate_basic import _draw_exposure, _frame, _pleiotropy, causal_curve  # noqa: E402
 
 
 def _expit(z):
@@ -70,17 +70,17 @@ def binarize_liability(liability, prevalence, link, rng):
 
 
 def simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed,
-                     link="logistic", prevalence=0.3):
+                     link="logistic", prevalence=0.3, maf=None, beta=None, alpha=None):
     """Binary-outcome model: Y = binarize(f(X) + gamma_y U + e_y).
 
     shape: 'linear' (f(x) = theta1 x), 'quadratic', or 'threshold' (see
     causal_curve() in simulate_basic.py for the latter two).
     """
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
     signal = theta1 * X if shape == "linear" else causal_curve(shape, X, theta1, theta2)
     e_y = rng.normal(0.0, 1.0, n)
-    liability = signal + gamma_y * U + e_y
+    liability = signal + _pleiotropy(G, maf, alpha) + gamma_y * U + e_y
     Y, realized_prevalence, intercept = binarize_liability(liability, prevalence, link, rng)
 
     if shape == "quadratic":

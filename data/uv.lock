@@ -127,6 +127,17 @@ wheels = [
 ]
 
 [[package]]
+name = "flamingo-fedmr"
+version = "0.1.0"
+source = { editable = "../fedmr" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "numpy", specifier = ">=1.26" }]
+
+[[package]]
 name = "fonttools"
 version = "4.65.0"
 source = { registry = "https://pypi.org/simple" }
@@ -794,6 +805,7 @@ name = "team10-data"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "flamingo-fedmr" },
     { name = "lifelines" },
     { name = "matplotlib" },
     { name = "numpy" },
@@ -807,6 +819,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "flamingo-fedmr", editable = "../fedmr" },
     { name = "lifelines", specifier = ">=0.30.3" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "numpy", specifier = ">=2.5.3" },

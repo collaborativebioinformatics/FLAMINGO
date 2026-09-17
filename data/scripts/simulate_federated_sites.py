@@ -12,6 +12,19 @@ nuisance parameters differ, mimicking ten biobanks in different countries:
 
 theta1, theta2 (the causal curve) are fixed across all sites: the causal
 effect of X on Y is assumed to be biology, not geography.
+
+Heterogeneity knobs (all off by default, so the checked-in sets are unchanged):
+
+    --shared-snps       the same harmonized SNPs at every site: one MAF vector and one
+                        beta vector drawn from the base seed; per-site h2_x then follows
+                        from those effects instead of being drawn
+    --maf-shift SD      with --shared-snps, perturb each site's allele frequencies on the
+                        logit scale by N(0, SD): allele frequencies differ by ancestry
+    --theta-sd SD       site-specific causal effect theta1 + N(0, SD)
+    --pleiotropy-mean/--pleiotropy-sd
+                        direct SNP -> Y effects alpha_j ~ N(mean, sd) per allele
+                        (balanced: mean 0; directional: mean != 0); shared across sites
+                        when --shared-snps, drawn per site otherwise
 """
 
 import argparse
@@ -23,7 +36,61 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from simulate_basic import simulate, simulate_nonlinear, simulate_survival  # noqa: E402
+from simulate_basic import scaled_beta, simulate, simulate_nonlinear, simulate_survival  # noqa: E402
+
+
+def add_heterogeneity_args(p):
+    """CLI knobs shared by both federated generators."""
+    p.add_argument("--shared-snps", action="store_true", help="same SNPs (MAF, beta) at every site")
+    p.add_argument("--maf-shift", type=float, default=0.0, help="with --shared-snps: logit-scale SD of per-site MAF shifts")
+    p.add_argument("--theta-sd", type=float, default=0.0, help="SD of site-specific theta1 around --theta1")
+    p.add_argument("--pleiotropy-mean", type=float, default=0.0, help="mean direct SNP -> Y effect per allele")
+    p.add_argument("--pleiotropy-sd", type=float, default=0.0, help="SD of direct SNP -> Y effects")
+
+
+class Heterogeneity:
+    """Draws the shared SNP panel, site-specific causal effects and pleiotropy from `a`
+    (the parsed CLI namespace) and hands each site its `extra` simulator kwargs."""
+
+    def __init__(self, rng, a):
+        self.a = a
+        self.pleiotropic = a.pleiotropy_mean != 0 or a.pleiotropy_sd != 0
+        self.maf0 = self.beta0 = self.alpha0 = None
+        if a.shared_snps:
+            self.maf0 = rng.uniform(0.05, 0.5, a.n_snps)
+            self.beta0 = scaled_beta(rng, self.maf0, a.h2x_mean)
+            self.alpha0 = rng.normal(a.pleiotropy_mean, a.pleiotropy_sd, a.n_snps) if self.pleiotropic else None
+        self.theta1 = (a.theta1 + rng.normal(0.0, a.theta_sd, a.n_sites) if a.theta_sd > 0
+                       else np.full(a.n_sites, a.theta1))
+
+    def extra(self, site_seed):
+        """Simulator kwargs for one site: shared maf (shifted per site), shared beta, alpha."""
+        a = self.a
+        site_rng = np.random.default_rng(10_000 + site_seed)
+        if a.shared_snps:
+            return {"maf": shift_maf(site_rng, self.maf0, a.maf_shift), "beta": self.beta0, "alpha": self.alpha0}
+        if self.pleiotropic:
+            return {"alpha": site_rng.normal(a.pleiotropy_mean, a.pleiotropy_sd, a.n_snps)}
+        return {}
+
+    def manifest(self):
+        a = self.a
+        out = {"shared_snps": a.shared_snps, "maf_shift": a.maf_shift, "theta_sd": a.theta_sd,
+               "pleiotropy_mean": a.pleiotropy_mean, "pleiotropy_sd": a.pleiotropy_sd}
+        if a.shared_snps:
+            out.update({"shared_maf": self.maf0.tolist(), "shared_beta": self.beta0.tolist(),
+                        "effect_allele": "allele coded 1 in the dosage; the same allele at every site"})
+            if self.alpha0 is not None:
+                out["shared_alpha"] = self.alpha0.tolist()
+        return out
+
+
+def shift_maf(rng, maf, sd):
+    """Perturb allele frequencies on the logit scale, kept inside (0.02, 0.98)."""
+    if sd <= 0:
+        return maf
+    logit = np.log(maf / (1 - maf)) + rng.normal(0.0, sd, len(maf))
+    return np.clip(1 / (1 + np.exp(-logit)), 0.02, 0.98)
 
 
 def sample_population_sizes(rng, n_sites, pop_min, pop_max):
@@ -69,6 +136,7 @@ def main():
     p.add_argument("--gamma-kappa", type=float, default=20.0, help="Beta concentration for gamma_x, gamma_y")
     p.add_argument("--censor-frac", type=float, default=0.3, help="cox: target fraction randomly censored")
     p.add_argument("--followup", type=float, default=15.0, help="cox: administrative end of follow-up")
+    add_heterogeneity_args(p)
     p.add_argument("--seed", type=int, default=1, help="base seed; site i uses seed + i for its own SNPs/individuals")
     p.add_argument("--out", type=Path, default=None,
                    help="output directory; default simulated_data/federated/<shape>")
@@ -81,21 +149,29 @@ def main():
         rng, a.n_sites, a.pop_min, a.pop_max, a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa
     )
 
+    if a.shape == "cox" and (a.shared_snps or a.pleiotropy_mean or a.pleiotropy_sd):
+        raise SystemExit("--shared-snps and pleiotropy are implemented for the continuous shapes only")
+    het = Heterogeneity(rng, a)
+
     a.out.mkdir(parents=True, exist_ok=True)
     manifest = []
     for i in range(a.n_sites):
         site_seed = a.seed + i + 1
         common = (int(n[i]), a.n_snps)
         nuisance = (float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]), site_seed)
+        extra = het.extra(site_seed)
+        t1 = float(het.theta1[i])
         if a.shape == "linear":
-            df, truth = simulate(*common, a.theta1, *nuisance)
-            truth["avg_slope"] = a.theta1
+            df, truth = simulate(*common, t1, *nuisance, **extra)
+            truth["avg_slope"] = t1
         elif a.shape == "cox":
-            df, truth = simulate_survival(*common, a.theta1, *nuisance,
+            df, truth = simulate_survival(*common, t1, *nuisance,
                                           censor_frac=a.censor_frac, followup=a.followup)
-            truth["avg_slope"] = a.theta1
+            truth["avg_slope"] = t1
         else:
-            df, truth = simulate_nonlinear(*common, a.shape, a.theta1, a.theta2, *nuisance)
+            df, truth = simulate_nonlinear(*common, a.shape, t1, a.theta2, *nuisance, **extra)
+        truth["theta1"] = t1
+        h2_x[i] = truth["h2_x"]           # realized value when SNPs are shared
         site_id = f"site{i + 1:02d}"
         df.write_csv(a.out / f"{site_id}.csv")
         (a.out / f"{site_id}.truth.json").write_text(json.dumps(truth, indent=1))
@@ -103,7 +179,7 @@ def main():
             "site_id": site_id, "n": int(n[i]), "h2_x": float(h2_x[i]),
             **({"events": int(df["event"].sum())} if a.shape == "cox" else {}),
             "gamma_x": float(gamma_x[i]), "gamma_y": float(gamma_y[i]),
-            "avg_slope": truth["avg_slope"], "seed": site_seed,
+            "theta1": t1, "avg_slope": truth["avg_slope"], "seed": site_seed,
         })
         print(f"{site_id}: n={int(n[i]):>6,}  h2_x={h2_x[i]:.3f}  "
               f"gamma_x={gamma_x[i]:.3f}  gamma_y={gamma_y[i]:.3f}")
@@ -112,6 +188,7 @@ def main():
     manifest_df.write_csv(a.out / "manifest.csv")
     (a.out / "manifest.json").write_text(json.dumps({
         "shape": a.shape, "theta1": a.theta1, "theta2": a.theta2, "n_snps": a.n_snps, "seed": a.seed,
+        **het.manifest(),
         **({"censor_frac": a.censor_frac, "followup": a.followup} if a.shape == "cox" else {}),
         "sites": manifest,
     }, indent=1))

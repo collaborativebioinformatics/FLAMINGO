@@ -10,10 +10,12 @@ dependencies = [
     "scikit-learn>=1.5",
     "matplotlib>=3.10.9",
     "lifelines>=0.30.0",
+    "flamingo-fedmr",
 ]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
+flamingo-fedmr = { path = "../fedmr", editable = true }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

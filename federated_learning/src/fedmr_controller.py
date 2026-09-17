@@ -1,0 +1,68 @@
+"""Server-side FedMR workflow for NVFlare: sum the sites' statistics, solve, optionally
+collect the robust-covariance round. No training, no averaging.
+
+Round 0 ("stats")   broadcast the protocol spec; each site returns SiteStats
+                    (arrays in params, column names and roles in meta)
+Round 1 ("robust")  broadcast theta by column name; each site returns H = Z' diag(u^2) Z
+
+The arithmetic is flamingo_fedmr's: the same aggregate() and fit() the data
+scripts and tests use, so the NVFlare result equals the in-process result.
+"""
+
+import json
+import os
+
+import numpy as np
+from nvflare.app_common.abstract.fl_model import FLModel, ParamsType
+from nvflare.app_common.workflows.model_controller import ModelController
+
+import flamingo_fedmr as fm
+
+
+class FedMRController(ModelController):
+    def __init__(self, protocol="local", basis="linear", crossfit=0, robust=True, out_path="", **kwargs):
+        super().__init__(**kwargs)
+        self.protocol, self.basis, self.crossfit, self.robust, self.out_path = protocol, basis, crossfit, robust, out_path
+
+    def run(self):
+        spec = {"protocol": self.protocol, "basis": self.basis, "crossfit": self.crossfit}
+        self.info(f"FedMR round 0: collecting sufficient statistics ({spec})")
+        replies = self.send_model_and_wait(
+            task_name="train", data=FLModel(params={}, params_type=ParamsType.FULL, current_round=0, total_rounds=2,
+                                             meta={"task": "stats", **spec}))
+        parts = [fm.SiteStats.from_transport(r.params, r.meta["fedmr"]) for r in replies]
+        stats = fm.aggregate(parts)
+        res = fm.fit(stats)
+        rounds = 1
+        self.info(f"FedMR fit over {len(parts)} sites, N = {stats.N}: " +
+                  ", ".join(f"{n} = {res[n]:.6f} ({res.se(n):.6f})" for n in res.w_names))
+
+        if self.robust:
+            self.info("FedMR round 1: robust covariance")
+            replies = self.send_model_and_wait(
+                task_name="train", data=FLModel(params={}, params_type=ParamsType.FULL, current_round=1,
+                                                 total_rounds=2, meta={"task": "robust", "theta": res.theta_by_name(),
+                                                                       **spec}))
+            H = fm.aggregate_robust([(r.meta["fedmr"]["z_names"], np.asarray(r.params["H"], float)) for r in replies],
+                                    stats.layout)
+            res.robust_cov = fm.robust_cov(stats, H)
+            rounds += 1
+
+        out = {"sites": stats.layout.sites, "N": int(stats.N), "rounds": rounds, "spec": spec,
+               "w_names": res.w_names, "theta": [float(t) for t in res.theta],
+               "se": [res.se(n) for n in res.w_names],
+               "robust_se": [res.se(n, True) for n in res.w_names] if self.robust else None,
+               "rss": res.rss, "sigma2": res.sigma2, "df_resid": res.df_resid,
+               "diagnostics": {"rank_A": res.diagnostics.rank_A, "dim_A": res.diagnostics.dim_A,
+                               "cond_A": res.diagnostics.cond_A, "cond_M": res.diagnostics.cond_M,
+                               "n_endogenous": res.diagnostics.n_endogenous,
+                               "n_instruments": res.diagnostics.n_instruments,
+                               "n_exogenous": res.diagnostics.n_exogenous, "absorbed": res.diagnostics.absorbed,
+                               "first_stage": {k: {kk: (float(vv) if isinstance(vv, (int, float, np.floating))
+                                                        else vv) for kk, vv in v.items()}
+                                               for k, v in res.diagnostics.first_stage.items()}}}
+        if self.out_path:
+            os.makedirs(os.path.dirname(self.out_path), exist_ok=True)
+            with open(self.out_path, "w") as f:
+                json.dump(out, f, indent=1)
+            self.info(f"wrote {self.out_path}")

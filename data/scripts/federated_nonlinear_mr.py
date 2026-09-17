@@ -29,8 +29,9 @@ import polars as pl
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import flamingo_fedmr as fm
+
 sys.path.insert(0, str(Path(__file__).parent))
-import fedmr  # noqa: E402
 from federated_summary_mr import gwas, ivw, quadratic_2sls  # noqa: E402
 from simulate_basic import causal_curve  # noqa: E402
 
@@ -90,16 +91,16 @@ def main():
     theta, cov = quadratic_2sls(sites)
     se = np.sqrt(np.diag(cov))
     slope, slope_se = sumstats_slope(sites)
-    fm = fedmr.fedmr([fedmr.SiteData(f"site{k + 1:02d}", G, X, Y) for k, (G, X, Y) in enumerate(sites)],
-                     basis="quadratic", robust=False)
-    fm_theta = np.array([fm["X"], fm["X2"]])
+    fmr = fm.LocalFirstStageFedMR(basis="quadratic", robust=False).run(
+        [fm.SiteData(f"site{k + 1:02d}", G, X, Y) for k, (G, X, Y) in enumerate(sites)]).result
+    fm_theta = np.array([fmr["X"], fmr["X2"]])
     fm_diff = float(np.max(np.abs(fm_theta - theta)))
 
     print(f"{a.shape} set, true theta1={t1}, theta2={t2}")
     print(f"concatenated quadratic 2SLS:  theta1 {theta[0]:.3f} ({se[0]:.3f})   theta2 {theta[1]:.3f} ({se[1]:.3f})")
     print(f"sumstats linear IVW:          slope  {slope:.3f} ({slope_se:.3f})   theta2 not identifiable")
-    print(f"federated FedMR quadratic:    theta1 {fm_theta[0]:.3f} ({fm.se('X'):.3f})   theta2 {fm_theta[1]:.3f} "
-          f"({fm.se('X2'):.3f})   |diff from concatenated| = {fm_diff:.1e}")
+    print(f"federated FedMR quadratic:    theta1 {fm_theta[0]:.3f} ({fmr.se('X'):.3f})   theta2 {fm_theta[1]:.3f} "
+          f"({fmr.se('X2'):.3f})   |diff from concatenated| = {fm_diff:.1e}")
 
     # dose-response curves, centred so every curve passes through f(0) = 0
     x = np.linspace(-2.5, 2.5, 200)
