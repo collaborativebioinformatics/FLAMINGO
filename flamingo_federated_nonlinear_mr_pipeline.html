@@ -1,0 +1,174 @@
+<h2 class="sr-only">Flowchart of the Flamingo pipeline: ten simulated biobank sites feed three analysis branches (summary-statistics MR, non-linear MR, NVFlare FedAvg), whose curves are overlaid on one dose-response plot and written to results folders.</h2>
+<style>
+.fw{--pk:#D4537E;--pk50:#FBEAF0;--pk1:#F4C0D1;--pk6:#993556;--pk8:#72243E;--co:#D85A30;--co50:#FAECE7;--co1:#F5C4B3;--co8:#712B13;--gr:#888780;font-size:13px;color:var(--text-primary);padding:.5rem 0}
+[data-mode="dark"] .fw{--pk50:#4B1528;--pk1:#72243E;--pk6:#ED93B1;--pk8:#F4C0D1;--co50:#4A1B0C;--co1:#712B13;--co8:#F5C4B3}
+@media (prefers-color-scheme:dark){:root:not([data-mode]) .fw{--pk50:#4B1528;--pk1:#72243E;--pk6:#ED93B1;--pk8:#F4C0D1;--co50:#4A1B0C;--co1:#712B13;--co8:#F5C4B3}}
+.cd{border:1px solid var(--pk1);border-radius:12px;padding:12px 14px;background:var(--surface-2)}
+.dash{border-style:dashed}
+.h{font-size:15px;font-weight:500;margin:0}
+.s{color:var(--text-secondary);font-size:12px;margin:1px 0 6px}
+.pl{display:inline-block;font-family:var(--font-mono);font-size:12px;border:1px solid var(--border);border-radius:6px;padding:1px 7px;margin:2px 0;color:var(--text-primary)}
+.pk{background:var(--pk50);color:var(--pk8);border-color:var(--pk1)}
+.co{background:var(--co50);color:var(--co8);border-color:var(--co1)}
+.ar{position:relative;height:28px}
+.ar::before{content:"";position:absolute;left:50%;top:0;bottom:3px;width:1.5px;background:var(--pk);transform:translateX(-50%)}
+.ar::after{content:"";position:absolute;left:50%;bottom:3px;width:7px;height:7px;border-right:1.5px solid var(--pk);border-bottom:1.5px solid var(--pk);transform:translateX(-50%) rotate(45deg)}
+.t{border-collapse:collapse;font-family:var(--font-mono);font-size:12px;margin-top:6px;width:100%}
+.t td{border:1px solid var(--pk1);padding:2px 6px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.lbl{font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);margin-top:8px}
+</style>
+<div class="fw">
+
+<div class="cd">
+<p class="h">0. Shared causal model</p>
+<p class="s">identical structure at every site</p>
+<svg width="100%" viewBox="0 0 640 118" role="img"><title>Causal graph</title><desc>SNPs G cause exposure X, which causes outcome Y through f(X); confounder U affects both X and Y.</desc>
+<defs><marker id="mp" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#D4537E" stroke-width="1.5"/></marker><marker id="mc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#D85A30" stroke-width="1.5"/></marker></defs>
+<rect x="40" y="68" width="110" height="36" rx="6" style="fill:var(--pk50);stroke:var(--pk6)" stroke-width="0.5"/>
+<text x="95" y="86" text-anchor="middle" dominant-baseline="central" style="fill:var(--pk8);font-size:13px;font-family:var(--font-mono)">SNPs G</text>
+<rect x="245" y="68" width="110" height="36" rx="6" style="fill:var(--pk50);stroke:var(--pk6)" stroke-width="0.5"/>
+<text x="300" y="86" text-anchor="middle" dominant-baseline="central" style="fill:var(--pk8);font-size:13px;font-family:var(--font-mono)">exposure X</text>
+<rect x="490" y="68" width="110" height="36" rx="6" style="fill:var(--pk50);stroke:var(--pk6)" stroke-width="0.5"/>
+<text x="545" y="86" text-anchor="middle" dominant-baseline="central" style="fill:var(--pk8);font-size:13px;font-family:var(--font-mono)">outcome Y</text>
+<rect x="360" y="6" width="130" height="32" rx="6" style="fill:var(--co50);stroke:#D85A30" stroke-width="0.5"/>
+<text x="425" y="22" text-anchor="middle" dominant-baseline="central" style="fill:var(--co8);font-size:13px;font-family:var(--font-mono)">confounder U</text>
+<line x1="152" y1="86" x2="241" y2="86" stroke="#D4537E" stroke-width="1.5" marker-end="url(#mp)"/>
+<line x1="357" y1="86" x2="486" y2="86" stroke="#D4537E" stroke-width="1.5" marker-end="url(#mp)"/>
+<line x1="395" y1="39" x2="330" y2="65" stroke="#D85A30" stroke-width="1.2" marker-end="url(#mc)"/>
+<line x1="455" y1="39" x2="515" y2="65" stroke="#D85A30" stroke-width="1.2" marker-end="url(#mc)"/>
+<text x="196" y="74" text-anchor="middle" style="fill:var(--text-secondary);font-size:12px;font-family:var(--font-mono)">h²ₓ</text>
+<text x="330" y="44" text-anchor="middle" style="fill:var(--co8);font-size:12px;font-family:var(--font-mono)">γₓ</text>
+<text x="520" y="44" text-anchor="middle" style="fill:var(--co8);font-size:12px;font-family:var(--font-mono)">γᵧ</text>
+<text x="422" y="110" text-anchor="middle" style="fill:var(--pk8);font-size:12px;font-family:var(--font-mono)">f(X) = θ₁X + θ₂X²</text>
+</svg>
+<span class="pl pk">--shape linear | quadratic | threshold | cox</span>
+<span class="pl">+ binary_quadratic_logistic · cox_rare</span>
+</div>
+
+<div class="ar"></div>
+
+<div class="cd">
+<p class="h">1. Simulate · 10 biobank sites</p>
+<p class="s">simulate_federated_sites.py</p>
+<div style="display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px">
+<div class="pl" style="text-align:center;padding:3px 2px">01<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:30%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">02<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:85%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">03<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:55%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">04<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:100%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">05<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:18%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">06<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:70%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">07<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:45%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">08<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:90%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">09<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:35%"></div></div>
+<div class="pl" style="text-align:center;padding:3px 2px">10<div style="height:4px;margin-top:3px;background:var(--co);border-radius:2px;width:62%"></div></div>
+</div>
+<table class="t" style="margin-top:10px">
+<tr><td style="color:var(--text-secondary)">same at every site</td><td class="pk">θ₁, θ₂ (the causal curve)</td></tr>
+<tr><td style="color:var(--text-secondary)">varies by site</td><td class="co">n 1k–10k · h²ₓ, γₓ, γᵧ ~ Beta</td></tr>
+<tr><td style="color:var(--text-secondary)">writes</td><td>&lt;shape&gt;/siteNN.csv + truth.json + manifest.json</td></tr>
+</table>
+</div>
+
+<div style="position:relative;height:34px">
+<div style="position:absolute;left:50%;top:0;height:12px;width:1.5px;background:var(--pk);transform:translateX(-50%)"></div>
+<div style="position:absolute;top:12px;height:1.5px;background:var(--pk);left:calc((100% - 24px)/6);right:calc((100% - 24px)/6)"></div>
+<div class="g3" style="position:absolute;top:12px;left:0;right:0"><div class="ar" style="height:22px"></div><div class="ar" style="height:22px"></div><div class="ar" style="height:22px"></div></div>
+</div>
+
+<div class="g3">
+<div class="cd">
+<p class="h">2. Summary-stat MR</p>
+<p class="s">federated_summary_mr.py</p>
+<span class="pl">GWAS of X, GWAS of Y</span>
+<div class="s" style="margin:0">Cox model if survival</div>
+<div class="lbl">travels</div>
+<span class="pl pk">β, SE per SNP</span>
+<div class="lbl">then</div>
+<span class="pl">IVW per site</span>
+<span class="pl">→ inverse-var meta</span>
+<div class="lbl">benchmark</div>
+<div class="pl dash" style="border-style:dashed;display:block">pooled 2SLS<br>site 1st stage + intercepts</div>
+<div class="lbl">recovers</div>
+<span class="pl">one average slope</span>
+</div>
+
+<div class="cd">
+<p class="h">3. Non-linear MR</p>
+<p class="s">federated_nonlinear_mr.py</p>
+<span class="pl dash" style="border-style:dashed">pooled individual rows</span>
+<div class="lbl">stage 1</div>
+<span class="pl">X̂ = SNP-predicted X</span>
+<div class="lbl">stage 2 · 2SLS</div>
+<table class="t" style="margin-top:2px">
+<tr><td style="color:var(--text-secondary)">regressor</td><td style="color:var(--text-secondary)">instrument</td></tr>
+<tr><td>X</td><td class="pk">X̂</td></tr>
+<tr><td>X²</td><td class="pk">X̂²</td></tr>
+</table>
+<div class="lbl">recovers</div>
+<span class="pl pk">θ̂₁, θ̂₂ · full curve</span>
+<div class="s" style="margin-top:6px">compared to the IVW line, which only captures the average slope</div>
+</div>
+
+<div class="cd">
+<p class="h">4. NVFlare FedAvg</p>
+<p class="s">federated_learning/job.py</p>
+<span class="pl">MLP 1→32→32→1 · ReLU</span>
+<table class="t">
+<tr><td>continuous</td><td class="pk">MSE</td></tr>
+<tr><td>binary</td><td class="pk">BCE</td></tr>
+<tr><td>survival</td><td class="pk">Cox PL</td></tr>
+</table>
+<div class="lbl">each client, each round ↻</div>
+<table class="t" style="margin-top:2px">
+<tr><td>1</td><td>get global</td></tr>
+<tr><td>2</td><td>eval 20% test</td></tr>
+<tr><td>3</td><td>train 80% · epochs</td></tr>
+<tr><td>4</td><td class="pk">send weights</td></tr>
+</table>
+<div class="pl co" style="display:block;margin-top:8px">no instruments →<br>confounded E[Y|X]</div>
+</div>
+</div>
+
+<div style="position:relative;height:34px">
+<div class="g3" style="position:absolute;top:0;left:0;right:0"><div style="height:12px;width:1.5px;background:var(--pk);margin:0 auto"></div><div style="height:12px;width:1.5px;background:var(--pk);margin:0 auto"></div><div style="height:12px;width:1.5px;background:var(--pk);margin:0 auto"></div></div>
+<div style="position:absolute;top:12px;height:1.5px;background:var(--pk);left:calc((100% - 24px)/6);right:calc((100% - 24px)/6)"></div>
+<div class="ar" style="position:absolute;top:12px;left:0;right:0;height:22px"></div>
+</div>
+
+<div class="cd">
+<p class="h">5. Overlay on one dose-response plot</p>
+<p class="s">quadratic shape shown · sketch, not results</p>
+<div style="display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:14px;align-items:center">
+<svg width="100%" viewBox="0 0 300 170" role="img"><title>Dose-response sketch</title><desc>True quadratic curve, near-identical non-linear MR estimate, straight IVW line, and a higher confounded MLP curve.</desc>
+<line x1="30" y1="145" x2="290" y2="145" stroke="var(--gr)" stroke-width="0.8"/>
+<line x1="30" y1="145" x2="30" y2="8" stroke="var(--gr)" stroke-width="0.8"/>
+<path d="M30 132 Q180 127 290 32" fill="none" stroke="#D4537E" stroke-width="3" opacity="0.45"/>
+<path d="M30 130 Q182 124 290 36" fill="none" stroke="#993556" stroke-width="1.5" stroke-dasharray="5 4"/>
+<path d="M30 120 L290 82" fill="none" stroke="var(--gr)" stroke-width="1.5"/>
+<path d="M30 110 Q175 98 290 12" fill="none" stroke="#D85A30" stroke-width="1.8"/>
+<text x="160" y="162" text-anchor="middle" style="fill:var(--text-secondary);font-size:11px;font-family:var(--font-mono)">exposure X</text>
+<text x="36" y="18" style="fill:var(--text-secondary);font-size:11px;font-family:var(--font-mono)">Y</text>
+</svg>
+<table class="t" style="margin:0">
+<tr><td style="color:var(--text-secondary)">line</td><td style="color:var(--text-secondary)">estimate</td><td style="color:var(--text-secondary)">gets</td></tr>
+<tr><td><div style="height:4px;width:22px;background:#D4537E;opacity:.45;border-radius:2px"></div></td><td>truth.json</td><td class="pk">θ₁, θ₂</td></tr>
+<tr><td><div style="height:0;width:22px;border-top:2px dashed #993556"></div></td><td>non-linear 2SLS</td><td class="pk">causal curve</td></tr>
+<tr><td><div style="height:2px;width:22px;background:var(--gr)"></div></td><td>IVW meta</td><td>avg slope</td></tr>
+<tr><td><div style="height:2px;width:22px;background:#D85A30"></div></td><td>FedAvg MLP</td><td class="co">E[Y|X]</td></tr>
+</table>
+</div>
+</div>
+
+<div class="ar"></div>
+
+<div class="cd">
+<p class="h">Outputs</p>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:6px">
+<div><span class="pl pk">data/results/</span><div class="s" style="margin-top:4px">forest plots · dose-response curves · sweeps</div></div>
+<div><span class="pl pk">federated_learning/results/&lt;dataset&gt;/</span><div class="s" style="margin-top:4px">metrics.csv · curves.csv · plots</div></div>
+</div>
+</div>
+
+<p class="s" style="margin-top:12px;line-height:1.6">Pink = the causal pathway and what travels between sites. Coral = what differs per site, plus confounding. Dashed = uses pooled individual rows (benchmark only, possible because the data is simulated).</p>
+</div>
