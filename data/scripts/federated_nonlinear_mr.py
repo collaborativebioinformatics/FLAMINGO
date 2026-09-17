@@ -30,10 +30,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, str(Path(__file__).parent))
+import fedmr  # noqa: E402
 from federated_summary_mr import gwas, ivw, quadratic_2sls  # noqa: E402
 from simulate_basic import causal_curve  # noqa: E402
 
-POOLED_COLOR, SUMSTATS_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1f1f1e", "#6b6a63", "#e6e5df"
+POOLED_COLOR, SUMSTATS_COLOR, FEDMR_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#8a2be2", "#1f1f1e", "#6b6a63", "#e6e5df"
 FL_STYLE = {"naive": ("#1baf7a", "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
             "2sri": ("#4a3aa7", "federated learning, 2SRI MLP: f(X) with first-stage residual as control function")}
 
@@ -89,10 +90,16 @@ def main():
     theta, cov = quadratic_2sls(sites)
     se = np.sqrt(np.diag(cov))
     slope, slope_se = sumstats_slope(sites)
+    fm = fedmr.fedmr([fedmr.SiteData(f"site{k + 1:02d}", G, X, Y) for k, (G, X, Y) in enumerate(sites)],
+                     basis="quadratic", robust=False)
+    fm_theta = np.array([fm["X"], fm["X2"]])
+    fm_diff = float(np.max(np.abs(fm_theta - theta)))
 
     print(f"{a.shape} set, true theta1={t1}, theta2={t2}")
     print(f"concatenated quadratic 2SLS:  theta1 {theta[0]:.3f} ({se[0]:.3f})   theta2 {theta[1]:.3f} ({se[1]:.3f})")
     print(f"sumstats linear IVW:          slope  {slope:.3f} ({slope_se:.3f})   theta2 not identifiable")
+    print(f"federated FedMR quadratic:    theta1 {fm_theta[0]:.3f} ({fm.se('X'):.3f})   theta2 {fm_theta[1]:.3f} "
+          f"({fm.se('X2'):.3f})   |diff from concatenated| = {fm_diff:.1e}")
 
     # dose-response curves, centred so every curve passes through f(0) = 0
     x = np.linspace(-2.5, 2.5, 200)
@@ -109,6 +116,8 @@ def main():
     ax.plot(x, fit, color=POOLED_COLOR, linewidth=2,
             label=f"concatenated: quadratic 2SLS  θ1={theta[0]:.2f}, θ2={theta[1]:.2f} (95% band)")
     ax.plot(x, line, color=SUMSTATS_COLOR, linewidth=2, label=f"sumstats: linear IVW  slope={slope:.2f}")
+    ax.plot(x, basis @ fm_theta, color=FEDMR_COLOR, linewidth=1.4, linestyle=(0, (1, 2)),
+            label=f"federated: FedMR sufficient statistics, identical to concatenated (|Δθ| = {fm_diff:.0e})")
     for m, (color, label) in FL_STYLE.items():
         if fl[m] is None:
             print(f"no federated {m} curve under {a.federated}; run federated_learning/job.py "
