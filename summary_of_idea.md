@@ -95,4 +95,4 @@ while the independence penalty is contributed by A alone. The chart above keeps 
 fit entirely at A for simplicity.
 
 
-![alt text](flowchart.jpeg)
+![alt text](whiteboard_pictures/flowchart.jpeg)
