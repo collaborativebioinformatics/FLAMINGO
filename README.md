@@ -1,4 +1,4 @@
-# FLAMINGO - Federated Non-Linear Mendelian Randomization
+# FLAMINGO - **F**ederated **L**earning **A**nd **M**endelian **I**nference of **N**on-linear **G**enetic **O**utcomes
 
 # Purpose
 
