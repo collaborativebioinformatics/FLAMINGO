@@ -1,0 +1,15 @@
+# Valid instruments but weak: instrument set chosen to fix mean F at 10.
+type: summary
+sample_size_Xs: 100000
+sample_size_Y:  100000
+number_of_exposures:   1
+number_of_causal_SNPs: 100
+true_causal_effects:   0.3
+Xs_variance_explained_by_g: 0.10
+IV_Pvalue_threshold: 5.0e-8
+MR_standardization: none
+prop_gwas_overlap_Xs_and_Y: 0
+number_of_UHP_causal_SNPs: 0
+number_of_CHP_causal_SNPs: 0
+simtype: weak
+fix_Fstatistic_at: 10

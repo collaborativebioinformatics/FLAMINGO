@@ -1,0 +1,50 @@
+# Simulated MR data (team10-data)
+
+Simulated data for testing Mendelian randomization (MR) methods.
+
+This repo collects the design notes, the survey of existing simulators, and
+the parameter files used to generate benchmark datasets.
+
+## Contents
+
+| Path | What |
+|---|---|
+| `docs/mr-simulation-model.md` | The data-generating model and the knobs an MR benchmark should vary |
+| `docs/package-survey.md` | Existing simulators (simmrd, simulateGP, GWASBrewer) and the within-family gap |
+| `docs/basic-simulator-parameters.md` | Parameter table for the Python simulator, fixed quantities, outputs |
+| `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
+| `scripts/simulate_basic.py` | Pure-Python generator for the base model, no pleiotropy, no LD |
+| `data/basic.truth.json` | True parameters of the checked-in baseline draw |
+| `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
+| `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
+
+## Quick start (Python, uv)
+
+```bash
+uv run python scripts/simulate_basic.py            # defaults: n=10000, 20 SNPs, theta=0.3
+uv run python scripts/simulate_basic.py --help     # all knobs
+```
+
+Writes `data/basic.parquet` (id, snp0..snpJ, U, X, Y) and `data/basic.truth.json`
+(theta, MAFs, per-SNP betas, confounder strengths, seed). The parquet is
+gitignored; regenerate it from the truth file's seed. Sanity check on the
+default seed: naive OLS 0.39, 2SLS through the SNPs 0.29, true theta 0.30.
+
+## simmrd scenarios (R, optional)
+
+```bash
+git clone https://github.com/noahlorinczcomi/simmrd
+cd simmrd/cli
+pixi install && pixi run setup
+pixi run simulate --params simmrd/params/uhp_chp.yaml \
+  --output uhp_chp.rds --iterations 500 --seed 42
+```
+
+## Scope
+
+- **In scope now:** individual-level base model in Python (uv); summary-statistic MR under pleiotropy, weak instruments,
+  sample overlap and winner's curse, via simmrd.
+- **Not covered by any package found:** within-family MR (dynastic effects,
+  assortative mating, stratification). That needs a pedigree simulator; see
+  the "within-family" section of `docs/package-survey.md` for what simACE
+  would need.
