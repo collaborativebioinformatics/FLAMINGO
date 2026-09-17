@@ -16,7 +16,7 @@ the parameter files used to generate benchmark datasets.
 | `scripts/simulate_basic.py` | Pure-Python generator: linear, quadratic, threshold, or Cox survival outcome; no pleiotropy, no LD |
 | `scripts/check_survival.py` | Naive, 2SPS, 2SRI and oracle Cox fits against the true log hazard ratio |
 | `scripts/simulate_federated_sites.py` | Ten sites sharing one quadratic causal curve, per-site heritability/confounding sampled from a distribution |
-| `simulated_data/basic.truth.json` | True parameters of the checked-in baseline draw |
+| `simulated_data/single/` | Single-site draws: `basic`, `basic_seed2`, `quadratic`, `threshold`, `cox` as `{csv,truth.json}` |
 | `simulated_data/federated/` | Ten-site federated draw: `site01..site10.{csv,truth.json}` + `manifest.{csv,json}` |
 | `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
 | `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
@@ -28,7 +28,7 @@ uv run python scripts/simulate_basic.py            # defaults: n=10000, 20 SNPs,
 uv run python scripts/simulate_basic.py --help     # all knobs
 ```
 
-Writes `simulated_data/basic.csv` (id, snp0..snpJ, U, X, Y) and `simulated_data/basic.truth.json`
+Writes `simulated_data/single/basic.csv` (id, snp0..snpJ, U, X, Y) and `simulated_data/single/basic.truth.json`
 (theta, MAFs, per-SNP betas, confounder strengths, seed). Both are checked in;
 the CSV can be regenerated from the seed in the truth file. Sanity check on the
 default seed: naive OLS 0.39, 2SLS through the SNPs 0.29, true theta 0.30.

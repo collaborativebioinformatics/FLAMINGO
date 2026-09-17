@@ -32,7 +32,7 @@ def fits(df: pl.DataFrame) -> dict[str, float]:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("dataset", type=Path, help="path without extension, e.g. simulated_data/cox")
+    p.add_argument("dataset", type=Path, help="path without extension, e.g. simulated_data/single/cox")
     a = p.parse_args()
     df = pl.read_csv(a.dataset.with_suffix(".csv"))
     t = json.loads(a.dataset.with_suffix(".truth.json").read_text())

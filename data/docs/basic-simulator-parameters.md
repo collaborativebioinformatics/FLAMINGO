@@ -27,8 +27,8 @@ which adds `--seeds` for the number of replicates.
 
 | File | Contents |
 |---|---|
-| `simulated_data/<name>.csv` | One row per individual: `id`, `snp0..snpJ`, `U`, `X`, `Y` |
-| `simulated_data/<name>.truth.json` | The seven parameters above plus the drawn MAFs and per-SNP betas |
+| `simulated_data/single/<name>.csv` | One row per individual: `id`, `snp0..snpJ`, `U`, `X`, `Y` |
+| `simulated_data/single/<name>.truth.json` | The seven parameters above plus the drawn MAFs and per-SNP betas |
 
 `U` is written to the CSV as an oracle for checks. Neither the naive OLS
 nor the 2SLS estimator in `sweep_seeds.py` uses it, and it must not be given

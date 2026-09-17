@@ -143,7 +143,7 @@ def main():
     p.add_argument("--censor-frac", type=float, default=0.3, help="cox: target fraction randomly censored")
     p.add_argument("--followup", type=float, default=15.0, help="cox: administrative end of follow-up")
     p.add_argument("--seed", type=int, default=1)
-    p.add_argument("--out", type=Path, default=Path("simulated_data/basic"))
+    p.add_argument("--out", type=Path, default=Path("simulated_data/single/basic"))
     a = p.parse_args()
 
     if a.shape == "linear":
