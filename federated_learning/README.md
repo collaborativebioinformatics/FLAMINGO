@@ -46,24 +46,48 @@ approximations on the logit and log-hazard scales.
 
 | File | What |
 |---|---|
-| `job.py` | Builds the `FedAvgJob`, attaches `src/client.py` to every site, runs the simulator, prints per-round tables, writes results and plots |
+| `job.py` | Builds the `FedAvgJob`, attaches `src/client.py` to every site, runs the chosen engine, prints per-round tables, writes results and plots |
 | `src/model.py` | `MLP` (naive) and `MRModel` (2sri / 2sps second stage). Output is predicted Y, a logit, or a log relative hazard |
 | `src/tasks.py` | The three outcome families: targets, loss, metrics, and the true causal curve from the manifest |
-| `src/client.py` | Client API script: 80/20 split, local first stage, local training, evaluation, fitted-curve recording |
+| `src/fedsite.py` | One site: 80/20 split, local first stage, local training, evaluation, fitted-curve recording. Shared by both engines |
+| `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
+| `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
 | `src/plots.py` | Per-run metric and fitted-curve plots plus the all-datasets overview |
 | `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` |
 | `results/fitted_curves_all.png`, `results/summary.csv` | Overview across datasets and methods |
-| `workspace/` | Simulator output (git-ignored) |
+| `workspace/` | Simulator output and per-job logs (git-ignored) |
 
 ## Run
 
 ```bash
-uv sync                                                # nvflare, torch (CPU), pandas, scikit-learn, lifelines, matplotlib
-uv run python job.py --dataset quadratic               # 2SRI on one dataset: 10 sites, 5 rounds, 2 local epochs
-uv run python job.py --all --method naive --method 2sri --method 2sps
+uv sync                                        # nvflare, torch (CPU), pandas, scikit-learn, lifelines, matplotlib
+uv run python job.py --dataset quadratic       # 2SRI on one dataset in the NVFlare simulator (~30 s)
+uv run python job.py --all --method naive --method 2sri --method 2sps --engine local --jobs 6   # full sweep, ~1 min
 uv run python job.py --dataset cox --method 2sps --rounds 10 --epochs 3 --lr 0.005
-uv run python src/plots.py                             # re-render every plot from results/ without training
+uv run python src/plots.py                     # re-render every plot from results/ without training
 ```
+
+## Engines and speed
+
+`--engine nvflare` (default) is the real federation: the NVFlare simulator
+starts a server and one client per site and exchanges weights through
+NVFlare. `--engine local` runs the same `Site` code and the same
+train-size-weighted FedAvg in one process. The two agree up to the random
+initial weights; use `local` for sweeps and `nvflare` to show the federation.
+
+The model is tiny, so wall time is overhead, not training. What was found and
+what job.py does about it, per job of 10 sites, 5 rounds, 2 local epochs:
+
+| Cost | Cause | Fix |
+|---|---|---|
+| 7x slower training | torch's default intra-op threads on small batches | `fedsite.py` pins torch to one thread |
+| 2 s idle per round | NVFlare's server tells clients to wait `task_request_interval` (default 2 s) between task requests | `--task_interval 0.05`, written into the exported job config |
+| ~10 s client start-up, ~4 s imports, ~2 s plots | NVFlare simulator and Python | unavoidable per job; `--jobs N` runs N jobs concurrently |
+| ~1 ms per optimizer step in eager PyTorch | batch 64 meant 690 steps per epoch | default batch is now 256 (512 for survival); test metrics and the 2SRI curve are unchanged or better |
+
+Measured on a 12-core CPU: one NVFlare job 38 s before, 32 s after; one local
+job about 10 s; the full sweep of 7 datasets x 3 methods took 7 min before
+(NVFlare, 6 jobs at a time) and 52 s now (local, 6 jobs at a time).
 
 ## What happens each round
 

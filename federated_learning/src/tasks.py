@@ -64,7 +64,7 @@ class Task:
     name = ""
     key_metric = ""           # what FedAvg tracks as "best" on the server
     metrics = ()              # column order in metrics CSVs and plots
-    default_batch_size = 64
+    default_batch_size = 256
     stratify = False
     curve_label = ""
 
