@@ -61,3 +61,30 @@ Single-seed check (n = 10000, default confounding):
 
 Linear 2SLS recovers the average slope in both cases. It says nothing about
 the curvature or the cutoff, which is what a non-linear MR method has to add.
+
+## Multiple sites, one causal curve: `simulate_federated_sites.py`
+
+For federation experiments, `scripts/simulate_federated_sites.py` calls
+`simulate_nonlinear()` once per site with a fixed `theta1`, `theta2` (the
+quadratic curve is biology, shared across every site) but per-site draws of
+the nuisance parameters, mimicking biobanks in different countries:
+
+| Parameter | Distribution | Rationale |
+|---|---|---|
+| `n` | one draw per equal-width bin of `[--pop-min, --pop-max]` (default 1,000-10,000) | ten distinct population sizes spread across the full range, not clustered near the mean |
+| `h2_x` | `Beta(mean * kappa, (1 - mean) * kappa)`, default mean 0.10, kappa 40 | SNP heritability of a trait genuinely varies across ancestries/environments; Beta keeps draws in (0, 1) and concentration `kappa` sets how tight the spread is around the mean |
+| `gamma_x`, `gamma_y` | independent `Beta(mean * kappa, (1 - mean) * kappa)` draws, default mean 0.3, kappa 20 | confounding strength (e.g. SES-driven) plausibly differs by country; `gamma_x` is drawn independently from `gamma_y` |
+
+`gamma_x` is clipped to `sqrt(0.95 - h2_x)` per site so `Var(e_x) = 1 - h2_x -
+gamma_x^2` in `simulate_basic.py` never goes negative.
+
+Each site gets its own seed (`--seed + site index`), so SNP MAFs/betas and
+individuals differ across sites even though `theta1`/`theta2` don't. Writes
+`simulated_data/<out>/site01.csv` .. `site10.csv` (+ matching
+`.truth.json`) and a `manifest.{csv,json}` with the sampled `n`, `h2_x`,
+`gamma_x`, `gamma_y`, `avg_slope` per site.
+
+```bash
+uv run python scripts/simulate_federated_sites.py            # 10 sites, defaults above
+uv run python scripts/simulate_federated_sites.py --help     # all knobs
+```

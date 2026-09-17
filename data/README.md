@@ -14,7 +14,9 @@ the parameter files used to generate benchmark datasets.
 | `docs/basic-simulator-parameters.md` | Parameter table for the Python simulator, fixed quantities, outputs |
 | `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
 | `scripts/simulate_basic.py` | Pure-Python generator for the base model, no pleiotropy, no LD |
+| `scripts/simulate_federated_sites.py` | Ten sites sharing one quadratic causal curve, per-site heritability/confounding sampled from a distribution |
 | `simulated_data/basic.truth.json` | True parameters of the checked-in baseline draw |
+| `simulated_data/federated/` | Ten-site federated draw: `site01..site10.{csv,truth.json}` + `manifest.{csv,json}` |
 | `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
 | `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
 
@@ -29,6 +31,17 @@ Writes `simulated_data/basic.parquet` (id, snp0..snpJ, U, X, Y) and `simulated_d
 (theta, MAFs, per-SNP betas, confounder strengths, seed). Both are checked in;
 the parquet can be regenerated from the seed in the truth file. Sanity check on the
 default seed: naive OLS 0.39, 2SLS through the SNPs 0.29, true theta 0.30.
+
+```bash
+uv run python scripts/simulate_federated_sites.py  # 10 sites, one shared quadratic curve
+```
+
+Writes `simulated_data/federated/site01..site10.{csv,truth.json}` plus a
+`manifest.{csv,json}`. Population size (1,000-10,000), SNP heritability
+`h2_x`, and confounder strengths `gamma_x`/`gamma_y` are drawn per site from
+distributions meant to mimic real variation between countries; `theta1`,
+`theta2` (the quadratic causal curve) are the same at every site. See
+`docs/basic-simulator-parameters.md` for the exact distributions.
 
 ## simmrd scenarios (R, optional)
 
