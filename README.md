@@ -1,3 +1,3 @@
-# Federated Mendelian randomisation across multiple biobanks
+# Federated Mendelian randomization across multiple biobanks
 
 See [summary of idea](summary_of_idea.md)
