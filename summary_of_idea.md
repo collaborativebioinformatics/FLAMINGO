@@ -1,5 +1,7 @@
 # Federated Mendelian randomisation across multiple biobanks
 
+Note: This is an older idea, and not necessarily the one we will pursue. In particular, we might not go with mendelian randomisation. 
+
 Mendelian randomisation models in a federated manner.
 
 - Non-linear Mendelian randomisation models for each local node
