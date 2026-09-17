@@ -9,6 +9,7 @@ dependencies = [
     "pandas>=2.2",
     "scikit-learn>=1.5",
     "matplotlib>=3.10.9",
+    "lifelines>=0.30.0",
 ]
 
 [tool.uv.sources]
