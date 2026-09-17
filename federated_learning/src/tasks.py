@@ -50,14 +50,22 @@ def true_curve(manifest, x):
 
 
 def _cox_ph_loss(log_h, time, event):
-    """Negative Cox partial log-likelihood (Breslow ties), averaged over events."""
+    """Negative Cox partial log-likelihood with Breslow's tie handling, averaged over events.
+
+    Sorted by descending time, logcumsumexp gives the risk set {j: t_j >= t_i} up
+    to position i; with tied times every member of the tie must see the whole
+    tie in its risk set, so each position takes the cumulative value at the end
+    of its tie group."""
     order = torch.argsort(time, descending=True)
-    log_h, event = log_h[order], event[order]
-    log_cum_risk = torch.logcumsumexp(log_h, dim=0)
+    log_h, event, t = log_h[order], event[order], time[order]
+    log_cum = torch.logcumsumexp(log_h, dim=0)
+    _, inverse, counts = torch.unique_consecutive(t, return_inverse=True, return_counts=True)
+    group_end = torch.cumsum(counts, 0) - 1
+    log_risk = log_cum[group_end[inverse]]
     n_events = event.sum()
     if n_events == 0:
         return log_h.sum() * 0.0
-    return -((log_h - log_cum_risk) * event).sum() / n_events
+    return -((log_h - log_risk) * event).sum() / n_events
 
 
 class Task:
@@ -102,7 +110,7 @@ class Binary(Task):
     key_metric = "accuracy"
     metrics = ("loss", "accuracy", "precision", "recall", "f1", "auc")
     stratify = True
-    curve_label = "predicted P(Y = 1)"
+    curve_label = "logit P(Y = 1)"
 
     def targets(self, df):
         y = torch.tensor(df["Y"].to_numpy(dtype=np.float32))
@@ -122,10 +130,6 @@ class Binary(Task):
                 "f1": f1_score(y, pred, zero_division=0),
                 "auc": roc_auc_score(y, prob) if len(np.unique(y)) > 1 else float("nan")}
 
-    @staticmethod
-    def curve_transform(out):
-        return 1.0 / (1.0 + np.exp(-out))
-
 
 class Survival(Task):
     name = "survival"
@@ -133,7 +137,7 @@ class Survival(Task):
     metrics = ("loss", "c_index", "events")
     default_batch_size = 512   # the partial likelihood needs risk sets, so larger batches
     stratify = True            # keep the event fraction equal across the split
-    curve_label = "log hazard ratio vs X = 0"
+    curve_label = "log hazard ratio"
 
     def targets(self, df):
         return {"time": torch.tensor(df["time"].to_numpy(dtype=np.float32)),
@@ -148,10 +152,6 @@ class Survival(Task):
         return {"loss": float(self.loss(out, tgt)),
                 "c_index": concordance_index(t, -h, e),
                 "events": float(e.sum())}
-
-    @staticmethod
-    def curve_transform(out):
-        return out - out[len(out) // 2]   # anchor at X = 0, like theta * X
 
 
 def detect_task(df, manifest=None):

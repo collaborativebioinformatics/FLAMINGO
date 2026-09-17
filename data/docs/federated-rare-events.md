@@ -21,7 +21,7 @@ uv run python scripts/rare_events_sweep.py --seeds 30 --followup 0.6 --out resul
 ```
 
 Sites have 300 to 3,000 people and no random censoring; administrative
-follow-up sets the event rate. One draw of the milder setting is checked in as
+follow-up sets the event rate. A separate draw of the milder setting, with the standard site seeds of `simulate_federated_sites.py` rather than one of the sweep replicates, is checked in as
 `simulated_data/federated/cox_rare/`, with per-site event counts in its
 manifest, and its forest plot is `results/sumstats.cox_rare.png`.
 

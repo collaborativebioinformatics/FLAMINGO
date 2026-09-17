@@ -36,4 +36,6 @@ def run(sites, data_dir, metrics_dir, method, rounds, epochs, lr, batch_size=0, 
     for rnd in range(rounds):
         states = [copy.deepcopy(c.run_round(rnd, global_params)[0]) for c in clients]
         global_params = fedavg(states, [c.n_train for c in clients])
+    for c in clients:                       # evaluation-only pass over the final aggregate
+        c.run_round(rounds, global_params, train=False)
     return global_params

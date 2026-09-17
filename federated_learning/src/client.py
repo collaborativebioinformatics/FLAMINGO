@@ -15,6 +15,8 @@ def main():
     p.add_argument("--data_dir", required=True)
     p.add_argument("--metrics_dir", required=True)
     p.add_argument("--method", default="2sri", choices=["naive", "2sri", "2sps"])
+    p.add_argument("--rounds", type=int, required=True,
+                   help="training rounds; round == rounds is the evaluation-only pass over the final aggregate")
     p.add_argument("--epochs", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-2)
     p.add_argument("--batch_size", type=int, default=0, help="0 = task default")
@@ -30,7 +32,8 @@ def main():
 
     while flare.is_running():
         input_model = flare.receive()
-        params, global_m = site.run_round(input_model.current_round, input_model.params)
+        rnd = input_model.current_round
+        params, global_m = site.run_round(rnd, input_model.params, train=rnd < args.rounds)
         flare.send(flare.FLModel(
             params=params,
             params_type="FULL",

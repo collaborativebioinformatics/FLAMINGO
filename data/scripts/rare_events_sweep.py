@@ -75,7 +75,7 @@ def main():
               flush=True)
     res = pl.DataFrame(rows)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    res.write_csv(a.out.with_suffix(".csv"))
+    res.write_csv(a.out.with_name(a.out.name + ".csv"))
 
     print(f"\n{a.seeds} seeds, true log HR {a.theta}, events per site: median of medians "
           f"{res['median_events'].median():.0f}, smallest site {res['min_events'].min()}")
@@ -115,7 +115,7 @@ def main():
     fig.suptitle(f"Few events per site: {a.n_sites} sites of {a.pop_min:,}-{a.pop_max:,} people, follow-up {a.followup}",
                  x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout()
-    fig.savefig(a.out.with_suffix(".png"))
+    fig.savefig(a.out.with_name(a.out.name + ".png"))
     print(f"wrote {a.out}.csv and {a.out}.png")
 
 

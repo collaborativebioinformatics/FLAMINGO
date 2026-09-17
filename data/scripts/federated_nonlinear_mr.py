@@ -124,7 +124,7 @@ def main():
     ax.set_zorder(ax2.get_zorder() + 1); ax.patch.set_visible(False)
     ax.set_xlabel("exposure X (standardised)")
     ax.set_ylabel("causal effect on Y, relative to X = 0")
-    ax.set_title(f"{a.shape} model: recovering the dose-response curve (n = {len(X_all):,}, 10 sites)",
+    ax.set_title(f"{a.shape} model: recovering the dose-response curve (n = {len(X_all):,}, {len(sites)} sites)",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, loc="upper left", fontsize=9)
     for s in ("top", "right"):

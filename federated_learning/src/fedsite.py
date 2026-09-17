@@ -56,8 +56,9 @@ class Site:
             self.xhat_tr = self.xhat_te = self.fs_r2 = None
         else:
             self.xhat_tr, self.xhat_te, self.fs_r2 = self._first_stage(g_tr, self.x_tr, g_te, self.x_te)
+            self.xhat_sd = float(self.xhat_tr.std())      # spread of the instrument; 2SPS is only identified within it
         self.model = make_model(method)
-        self.cols = [*self.task.metrics, "fs_r2"] if method != "naive" else list(self.task.metrics)
+        self.cols = [*self.task.metrics, "fs_r2", "xhat_sd"] if method != "naive" else list(self.task.metrics)
         os.makedirs(os.path.join(metrics_dir, "curves"), exist_ok=True)
         self.metrics_path = os.path.join(metrics_dir, f"{name}.csv")
         self.curves_path = os.path.join(metrics_dir, "curves", f"{name}.csv")
@@ -92,7 +93,7 @@ class Site:
         self.model.eval()
         m = self.task.evaluate(self.model(self.x_te, self.xhat_te), self.t_te)
         if self.fs_r2 is not None:
-            m["fs_r2"] = self.fs_r2
+            m["fs_r2"], m["xhat_sd"] = self.fs_r2, self.xhat_sd
         return m
 
     def train(self, rnd):
@@ -111,9 +112,10 @@ class Site:
                 loss.backward()
                 opt.step()
 
-    def run_round(self, rnd, global_params):
-        """Load the global weights, evaluate, record the curve, train locally, evaluate again.
-        Returns (updated state_dict, metrics of the received global model)."""
+    def run_round(self, rnd, global_params, train=True):
+        """Load the global weights, evaluate, record the curve, then (unless train=False, the
+        evaluation-only pass over the final aggregate) train locally and evaluate again.
+        Returns (state_dict to send back, metrics of the received global model)."""
         self.model.load_state_dict(global_params)
         global_m = self.evaluate()
         print(f"[{self.name}] round {rnd} global-model test: {fmt(global_m)}", flush=True)
@@ -121,11 +123,16 @@ class Site:
             fx = self.model.curve(self.x_grid).numpy()
         append_rows(self.curves_path, ["site", "round", "x", "f"],
                     [[self.name, rnd, float(xg), float(fg)] for xg, fg in zip(X_GRID, fx)])
+        header = ["site", "round", "stage", "n_train", "n_test", *self.cols]
+        if not train:
+            append_rows(self.metrics_path, header,
+                        [[self.name, rnd, "global", self.n_train, self.n_test, *[global_m[k] for k in self.cols]]])
+            return self.model.state_dict(), global_m
 
         self.train(rnd)
         local_m = self.evaluate()
         print(f"[{self.name}] round {rnd} local-model  test: {fmt(local_m)}", flush=True)
-        append_rows(self.metrics_path, ["site", "round", "stage", "n_train", "n_test", *self.cols],
+        append_rows(self.metrics_path, header,
                     [[self.name, rnd, stage, self.n_train, self.n_test, *[m[k] for k in self.cols]]
                      for stage, m in (("global", global_m), ("local", local_m))])
         return self.model.state_dict(), global_m

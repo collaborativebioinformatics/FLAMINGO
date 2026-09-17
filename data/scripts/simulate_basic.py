@@ -29,7 +29,10 @@ def _draw_exposure(rng, n, n_snps, h2_x, gamma_x):
     gx = (G - 2 * maf) @ beta
 
     U = rng.normal(0.0, 1.0, n)
-    e_x = rng.normal(0.0, np.sqrt(1.0 - h2_x - gamma_x**2), n)
+    resid_var = 1.0 - h2_x - gamma_x**2
+    if resid_var <= 0:
+        raise ValueError(f"h2_x + gamma_x^2 must be < 1 so Var(X) = 1 is attainable; got {h2_x} + {gamma_x}^2")
+    e_x = rng.normal(0.0, np.sqrt(resid_var), n)
     X = gx + gamma_x * U + e_x
     return G, maf, beta, U, X
 
@@ -155,8 +158,8 @@ def main():
         df, truth = simulate_nonlinear(a.n, a.n_snps, a.shape, a.theta, a.theta2,
                                        a.h2_x, a.gamma_x, a.gamma_y, a.seed)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    df.write_csv(a.out.with_suffix(".csv"))
-    a.out.with_suffix(".truth.json").write_text(json.dumps(truth, indent=1))
+    df.write_csv(a.out.with_name(a.out.name + ".csv"))
+    a.out.with_name(a.out.name + ".truth.json").write_text(json.dumps(truth, indent=1))
     print(f"wrote {a.out}.csv ({df.height} rows, {df.width} cols) and {a.out}.truth.json")
 
 

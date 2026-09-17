@@ -58,7 +58,7 @@ def main():
         rows.append({"seed": seed, "ols": ols, "tsls": tsls, "avg_slope": target})
     res = pl.DataFrame(rows)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    res.write_csv(a.out.with_suffix(".csv"))
+    res.write_csv(a.out.with_name(a.out.name + ".csv"))
 
     ols, tsls = res["ols"].to_numpy(), res["tsls"].to_numpy()
     target = float(res["avg_slope"].mean())
@@ -89,7 +89,7 @@ def main():
     ax.grid(axis="y", color=GRID, linewidth=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
-    fig.savefig(a.out.with_suffix(".png"))
+    fig.savefig(a.out.with_name(a.out.name + ".png"))
     print(f"wrote {a.out}.csv and {a.out}.png")
 
 

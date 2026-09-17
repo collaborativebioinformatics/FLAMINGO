@@ -115,14 +115,14 @@ def main():
                    help="how the continuous liability is turned into 0/1")
     p.add_argument("--prevalence", type=float, default=0.3, help="target P(Y=1)")
     p.add_argument("--seed", type=int, default=1)
-    p.add_argument("--out", type=Path, default=Path("simulated_data/binary"))
+    p.add_argument("--out", type=Path, default=Path("simulated_data/single/binary"))
     a = p.parse_args()
 
     df, truth = simulate_binary(a.n, a.n_snps, a.shape, a.theta1, a.theta2,
                                  a.h2_x, a.gamma_x, a.gamma_y, a.seed, a.link, a.prevalence)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    df.write_csv(a.out.with_suffix(".csv"))
-    a.out.with_suffix(".truth.json").write_text(json.dumps(truth, indent=1))
+    df.write_csv(a.out.with_name(a.out.name + ".csv"))
+    a.out.with_name(a.out.name + ".truth.json").write_text(json.dumps(truth, indent=1))
     print(f"wrote {a.out}.csv ({df.height} rows, {df.width} cols) and {a.out}.truth.json  "
           f"prevalence: target={a.prevalence:.3f} realized={truth['prevalence_realized']:.3f}")
 

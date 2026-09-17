@@ -18,13 +18,15 @@ the parameter files used to generate benchmark datasets.
 | `docs/federated-rare-events.md` | Scenario 2, negative result: few events per site does not separate sumstats from pooled Cox |
 | `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
 | `scripts/simulate_basic.py` | Pure-Python generator: linear, quadratic, threshold, or Cox survival outcome; no pleiotropy, no LD |
+| `scripts/simulate_binary.py` | Same exposure model with a 0/1 outcome from a liability or logistic link at a target prevalence |
+| `scripts/simulators.py`, `scripts/simulate_federated.py` | Registry of outcome simulators and the generic ten-site orchestrator (`--outcome continuous|binary|survival`) |
 | `scripts/check_survival.py` | Naive, 2SPS, 2SRI and oracle Cox fits against the true log hazard ratio |
 | `scripts/federated_summary_mr.py` | Per model: GWAS summary stats per site, IVW MR per site, meta-analysis vs the NVFlare federated model vs one pooled fit on concatenated data, forest plot; for curved models a two-column plot adding site-level model summaries |
 | `scripts/federated_nonlinear_mr.py` | Quadratic 2SLS on concatenated sites vs the sumstats line; dose-response plot |
 | `scripts/rare_events_sweep.py` | Seed sweep of the rare-event Cox setting: bias, RMSE and coverage for both routes |
 | `scripts/simulate_federated_sites.py` | Ten sites sharing one causal curve (`--shape`), per-site heritability/confounding sampled from a distribution |
 | `simulated_data/single/` | Single-site draws: `basic`, `basic_seed2`, `quadratic`, `threshold`, `cox` as `{csv,truth.json}` |
-| `simulated_data/federated/<shape>/` | Ten-site federated draws, one per phenotype model plus `cox_rare` (small sites, short follow-up) and `ushape` (θ1 = 0, zero average slope): `site01..site10.{csv,truth.json}`, `manifest.{csv,json}`, and `sumstats/` from the analysis |
+| `simulated_data/federated/<shape>/` | Ten-site federated draws, one per phenotype model plus `cox_rare` (small sites, short follow-up), `ushape` (θ1 = 0, zero average slope) and `binary_quadratic_logistic` (0/1 outcome, no summary-statistics analysis yet): `site01..site10.{csv,truth.json}`, `manifest.{csv,json}`, and `sumstats/` from the analysis |
 | `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
 | `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
 

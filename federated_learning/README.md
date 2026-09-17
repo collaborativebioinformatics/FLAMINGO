@@ -48,7 +48,7 @@ approximations on the logit and log-hazard scales.
 |---|---|
 | `job.py` | Builds the `FedAvgJob`, attaches `src/client.py` to every site, runs the chosen engine, prints per-round tables, writes results and plots |
 | `src/model.py` | `MLP` (naive) and `MRModel` (2sri / 2sps second stage). Output is predicted Y, a logit, or a log relative hazard |
-| `src/tasks.py` | The three outcome families: targets, loss, metrics, and the true causal curve from the manifest |
+| `src/tasks.py` | The three outcome families: targets, loss (Cox partial likelihood with Breslow ties), metrics, and the true causal curve from the manifest |
 | `src/fedsite.py` | One site: 80/20 split, local first stage, local training, evaluation, fitted-curve recording. Shared by both engines |
 | `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
 | `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
@@ -99,8 +99,12 @@ job about 10 s; the full sweep of 7 datasets x 3 methods took 7 min before
 4. Each client evaluates the updated model on the same test split and prints it.
 5. Weights go back to the server, which averages them weighted by train size.
 
-After the simulator finishes, `job.py` prints one table per round and stage
-with every client's metrics plus a test-size-weighted mean.
+After the last training round every client evaluates the final aggregate
+once more (an evaluation-only round, so `--rounds 5` reports rounds 0 to 5,
+where round 5 has only the "global" stage). `job.py` prints one table per
+round and stage with every client's metrics plus a test-size-weighted mean,
+then writes `results/summary.csv` and `results/fitted_curves_all.png` over
+every run present in `results/`.
 
 ## Reading the fitted curves
 
@@ -112,12 +116,15 @@ curve: below the naive fit where confounding inflates the association and
 above it where it deflates it. The correction is only as strong as the
 instruments, so the MR curves are noisier than the naive one and least
 reliable in the tails of X, where few people and little instrument variation
-sit. `../data/scripts/federated_nonlinear_mr.py` draws the naive and 2SRI
+sit. For 2SPS the plot is solid only within two standard deviations of
+`X_hat`, which is where `f(X_hat)` is identified, and dotted beyond. Binary
+outcomes are drawn on the logit scale, which is where the model's `f` lives;
+the binned data points are converted to logits to match. `../data/scripts/federated_nonlinear_mr.py` draws the naive and 2SRI
 curves next to the concatenated 2SLS fit and the summary-statistics IVW line.
 
 ## Notes
 
-- Last-round weighted test metrics for every run are in `results/summary.csv`.
+- Last-round weighted test metrics for every run are in `results/summary.csv`, written by `job.py` and by `src/plots.py`.
   Test metrics are similar across methods because all three predict the
   outcome from the same information; the methods differ in what `f` means,
   not in predictive accuracy.

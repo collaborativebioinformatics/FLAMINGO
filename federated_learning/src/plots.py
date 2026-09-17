@@ -45,12 +45,17 @@ def _style(ax):
     ax.tick_params(colors=MUTED, labelsize=8, length=0)
 
 
-def last_curve(curves, task):
+def last_curve(curves):
     last = curves["round"].max()
     c = curves[curves["round"] == last].groupby("x")["f"].mean().sort_index()
     x, f = c.index.to_numpy(), c.to_numpy()
     f = f - np.interp(0.0, x, f)                 # anchor at X = 0, like the true curve
     return x, f, int(last)
+
+
+def _logit(p):
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
 
 
 def plot_metrics(df, task, stage, out, dataset, method):
@@ -97,8 +102,9 @@ def plot_metrics(df, task, stage, out, dataset, method):
     plt.close(fig)
 
 
-def draw_curves(ax, method_curves, task, manifest, data_dir, title):
-    """method_curves: {method: curves DataFrame}. Draws truth, binned means, one line per method."""
+def draw_curves(ax, method_runs, task, manifest, data_dir, title):
+    """method_runs: {method: (metrics, curves)}. Draws truth, binned means, one line per method.
+    Binary outcomes are drawn on the logit scale, where the model's f lives."""
     _style(ax)
     ax.grid(axis="x", color=GRID, lw=0.8)
     if task.name != "survival":
@@ -107,17 +113,27 @@ def draw_curves(ax, method_curves, task, manifest, data_dir, title):
         pooled["bin"] = pd.cut(pooled.X, np.linspace(-3, 3, 25))
         emp = pooled.groupby("bin", observed=True).agg(x=("X", "mean"), y=("Y", "mean"), n=("Y", "size"))
         emp = emp[emp.n >= 30]
-        ylab = "mean Y" if task.name == "continuous" else "P(Y = 1)"
-        y0 = np.interp(0.0, emp.x, emp.y)
-        ax.scatter(emp.x, emp.y - y0, s=18, color=GRAY, zorder=2,
+        y = emp.y.to_numpy() if task.name == "continuous" else _logit(emp.y.to_numpy())
+        ylab = "mean Y" if task.name == "continuous" else "logit of P(Y = 1)"
+        y0 = np.interp(0.0, emp.x, y)
+        ax.scatter(emp.x, y - y0, s=18, color=GRAY, zorder=2,
                    label=f"pooled data: binned {ylab}, relative to X = 0")
     x_ref = None
     for method in METHODS:
-        if method not in method_curves:
+        if method not in method_runs:
             continue
-        x, f, last = last_curve(method_curves[method], task)
+        metrics, curves = method_runs[method]
+        x, f, last = last_curve(curves)
         x_ref = x
         st = METHOD_STYLE[method]
+        if method == "2sps" and "xhat_sd" in metrics.columns:
+            # f(X_hat) is only identified where X_hat has support: solid within 2 sd, faint beyond
+            lim = 2 * metrics.xhat_sd.max()
+            inside = np.abs(x) <= lim
+            ax.plot(x[inside], f[inside], color=st["color"], lw=2.4, zorder=4,
+                    label=f'{st["label"]}, round {last} (solid: |X| <= 2 sd of X_hat = {lim:.1f})')
+            ax.plot(x, f, color=st["color"], lw=1.0, ls=":", zorder=3)
+            continue
         ax.plot(x, f, color=st["color"], lw=2.4, zorder=4, label=f'{st["label"]}, round {last}')
     tc = true_curve(manifest, x_ref)
     if tc is not None:
@@ -148,11 +164,11 @@ def plot_dataset(dataset, method, results_root, data_dir, task=None):
     for stage in ("global", "local"):
         plot_metrics(metrics, task, stage, os.path.join(results_dir, f"metrics_by_round.{stage}.png"), dataset, method)
 
-    method_curves = {method: curves}
+    method_runs = {method: (metrics, curves)}
     if method != "naive" and _load(results_root, "naive", dataset):
-        method_curves["naive"] = _load(results_root, "naive", dataset)[1]
+        method_runs["naive"] = _load(results_root, "naive", dataset)
     fig, ax = plt.subplots(figsize=(7.5, 4.8), facecolor=SURFACE)
-    draw_curves(ax, method_curves, task, manifest, data_dir, "")
+    draw_curves(ax, method_runs, task, manifest, data_dir, "")
     ax.legend(frameon=False, fontsize=8, loc="upper left")
     fig.suptitle(f"{dataset}: fitted X -> outcome curve ({method})", x=0.01, ha="left", fontsize=12,
                  color=INK, fontweight="bold")
@@ -176,27 +192,27 @@ def plot_overview(datasets, results_root, fed_dir, out):
         data_dir = os.path.join(fed_dir, ds)
         manifest = load_manifest(data_dir)
         task = detect_task(pd.read_csv(os.path.join(data_dir, "site01.csv"), nrows=2000), manifest)
-        method_curves = {}
+        method_runs = {}
         for method in METHODS:
             loaded = _load(results_root, method, ds)
             if loaded is None:
                 continue
             metrics, curves = loaded
-            method_curves[method] = curves
+            method_runs[method] = loaded
             g = metrics[(metrics["round"] == metrics["round"].max()) & (metrics.stage == "global")]
             w = g.n_test
             score = {m: (g[m] * w).sum() / w.sum() for m in task.metrics if m not in ("loss", "events")}
             if "fs_r2" in g.columns:
                 score["fs_r2"] = (g.fs_r2 * w).sum() / w.sum()
             rows.append({"dataset": ds, "method": method, "task": task.name, "round": int(g["round"].iloc[0]), **score})
-        draw_curves(ax, method_curves, task, manifest, data_dir, f"{ds} ({task.name})")
+        draw_curves(ax, method_runs, task, manifest, data_dir, f"{ds} ({task.name})")
     handles = {}
     for ax in axes.flat:
         for h, l in zip(*ax.get_legend_handles_labels()):
-            handles.setdefault(l.split(", round")[0], h)
+            handles.setdefault(l.split(", round")[0].split(" (solid")[0], h)
     fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="upper right", ncol=2,
                bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("Federated fit of the X -> outcome curve, naive vs Mendelian randomization", x=0.01, ha="left",
+    fig.suptitle("Federated X -> outcome curve: naive vs MR", x=0.01, ha="left",
                  fontsize=12, color=INK, fontweight="bold")
     fig.text(0.01, 0.94, NOTE, fontsize=8, color=MUTED)
     fig.tight_layout(rect=(0, 0, 1, 0.92))

@@ -23,7 +23,9 @@ from simulate_binary import simulate_binary  # noqa: E402
 def _continuous_simulator(shape, theta1, theta2):
     if shape == "linear":
         def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed):
-            return simulate(n, n_snps, theta1, h2_x, gamma_x, gamma_y, seed)
+            df, truth = simulate(n, n_snps, theta1, h2_x, gamma_x, gamma_y, seed)
+            truth.setdefault("avg_slope", theta1)   # the analysis scripts read it for every outcome
+            return df, truth
     else:
         def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed):
             return simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed)
@@ -38,9 +40,11 @@ def _binary_simulator(shape, theta1, theta2, link, prevalence):
 
 def _survival_simulator(theta, weibull_k, weibull_scale, censor_frac, followup):
     def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed):
-        return simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
-                                  weibull_k=weibull_k, weibull_scale=weibull_scale,
-                                  censor_frac=censor_frac, followup=followup)
+        df, truth = simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
+                                      weibull_k=weibull_k, weibull_scale=weibull_scale,
+                                      censor_frac=censor_frac, followup=followup)
+        truth.setdefault("avg_slope", theta)   # log hazard ratio per unit X, what IVW targets
+        return df, truth
     return sim_fn
 
 

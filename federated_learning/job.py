@@ -82,12 +82,14 @@ def run_dataset(dataset, method, args):
         local_engine.run(sites, data_dir, metrics_dir, method, args.rounds, args.epochs, args.lr, args.batch_size)
     else:
         initial = MLP() if method == "naive" else MRModel(method)
-        job = FedAvgJob(name=f"fedavg_{method}_{dataset}", n_clients=len(sites), num_rounds=args.rounds,
+        # one extra round so every client evaluates the final aggregate (clients skip training in it)
+        job = FedAvgJob(name=f"fedavg_{method}_{dataset}", n_clients=len(sites), num_rounds=args.rounds + 1,
                         initial_model=initial, key_metric=task.key_metric)
         runner = ScriptRunner(
             script=os.path.join(HERE, "src", "client.py"),
             script_args=(f"--data_dir {data_dir} --metrics_dir {metrics_dir} --method {method} "
-                         f"--epochs {args.epochs} --lr {args.lr} --batch_size {args.batch_size}"),
+                         f"--rounds {args.rounds} --epochs {args.epochs} --lr {args.lr} "
+                         f"--batch_size {args.batch_size}"),
         )
         for site in sites:
             job.to(runner, site)
@@ -109,10 +111,15 @@ def summarize(df, task, epochs):
     score = [m for m in task.metrics if m not in ("loss", "events")]
     extra = ["fs_r2"] if "fs_r2" in df.columns else []
     cols = ["site", "n_train", "n_test", *extra, *task.metrics]
+    last = df["round"].max()
     for rnd, g in df.groupby("round"):
         for stage, label in (("global", "global model received"),
                              ("local", f"after {epochs} local epochs")):
             sub = g[g.stage == stage].sort_values("site")
+            if sub.empty:
+                continue
+            if rnd == last:
+                label = f"final aggregate after {last} rounds"
             print(f"\n=== Round {rnd}: {label} (per-client test split) ===")
             print(sub[cols].to_string(index=False))
             w = sub.n_test
@@ -133,22 +140,26 @@ def run_parallel(pairs, args):
         dataset, method = pair
         log = os.path.join(log_dir, f"{method}.{dataset}.log")
         with open(log, "w") as f:
-            rc = subprocess.run([sys.executable, __file__, "--dataset", dataset, "--method", method, *passthrough],
+            rc = subprocess.run([sys.executable, __file__, "--dataset", dataset, "--method", method, "--child",
+                                 *passthrough],
                                 stdout=f, stderr=subprocess.STDOUT).returncode
         return dataset, method, rc, log
 
     print(f"running {len(pairs)} jobs, {args.jobs} at a time; logs in {log_dir}", flush=True)
     failed = []
-    with ThreadPoolExecutor(max_workers=args.jobs) as ex:
-        for fut in as_completed(ex.submit(one, pr) for pr in pairs):
-            dataset, method, rc, log = fut.result()
-            text = open(log).read()
-            if rc != 0:
-                failed.append((dataset, method))
-                print(f"\n##### {dataset} / {method}: FAILED (exit {rc}), see {log}\n" + text[-2000:], flush=True)
-                continue
-            start = text.find("=== Round")
-            print(f"\n##### {dataset} / {method}: done #####\n" + (text[start:] if start >= 0 else ""), flush=True)
+    # MR jobs overlay the naive curve of the same dataset, so all naive jobs finish first.
+    batches = [[p for p in pairs if p[1] == "naive"], [p for p in pairs if p[1] != "naive"]]
+    for batch in batches:
+        with ThreadPoolExecutor(max_workers=args.jobs) as ex:
+            for fut in as_completed(ex.submit(one, pr) for pr in batch):
+                dataset, method, rc, log = fut.result()
+                text = open(log).read()
+                if rc != 0:
+                    failed.append((dataset, method))
+                    print(f"\n##### {dataset} / {method}: FAILED (exit {rc}), see {log}\n" + text[-2000:], flush=True)
+                    continue
+                start = text.find("=== Round")
+                print(f"\n##### {dataset} / {method}: done #####\n" + (text[start:] if start >= 0 else ""), flush=True)
     if failed:
         raise SystemExit(f"{len(failed)} job(s) failed: {failed}")
 
@@ -166,6 +177,7 @@ def main():
     p.add_argument("--threads", type=int, default=None, help="simulator threads (default: one per site)")
     p.add_argument("--workspace", default=os.path.join(HERE, "workspace"))
     p.add_argument("--jobs", type=int, default=1, help="run this many (dataset, method) jobs concurrently")
+    p.add_argument("--child", action="store_true", help=argparse.SUPPRESS)   # set on --jobs subprocesses
     p.add_argument("--task_interval", type=float, default=0.05,
                    help="nvflare engine: seconds clients wait between task requests (NVFlare default 2)")
     p.add_argument("--engine", choices=["nvflare", "local"], default="nvflare",
@@ -176,12 +188,22 @@ def main():
         datasets = sorted(d for d in os.listdir(FED_DIR) if os.path.isfile(os.path.join(FED_DIR, d, "manifest.json")))
     else:
         datasets = args.dataset or ["quadratic"]
-    pairs = [(d, m) for m in (args.method or ["2sri"]) for d in datasets]
+    methods = args.method or ["2sri"]
+    pairs = [(d, m) for m in (["naive"] if "naive" in methods else []) + [m for m in methods if m != "naive"]
+             for d in datasets]
     if args.jobs > 1 and len(pairs) > 1:
         run_parallel(pairs, args)
     else:
         for d, m in pairs:
             run_dataset(d, m, args)
+    if not args.child:
+        results_root = os.path.join(HERE, "results")
+        done = sorted({d for m in plots.METHODS if os.path.isdir(os.path.join(results_root, m))
+                       for d in os.listdir(os.path.join(results_root, m))
+                       if os.path.isfile(os.path.join(results_root, m, d, "metrics.csv"))})
+        summary = plots.plot_overview(done, results_root, FED_DIR, os.path.join(results_root, "fitted_curves_all.png"))
+        print("\nresults/summary.csv (last-round weighted test metrics, all runs so far):")
+        print(summary.to_string(index=False))
 
 
 if __name__ == "__main__":

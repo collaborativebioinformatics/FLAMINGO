@@ -34,8 +34,8 @@ def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("dataset", type=Path, help="path without extension, e.g. simulated_data/single/cox")
     a = p.parse_args()
-    df = pl.read_csv(a.dataset.with_suffix(".csv"))
-    t = json.loads(a.dataset.with_suffix(".truth.json").read_text())
+    df = pl.read_csv(a.dataset.with_name(a.dataset.name + ".csv"))
+    t = json.loads(a.dataset.with_name(a.dataset.name + ".truth.json").read_text())
     est = fits(df)
     print(f"true log HR {t['theta']:.3f}  (HR {t['hazard_ratio']:.2f}), event rate {t['event_rate']:.2f}")
     for k, v in est.items():
