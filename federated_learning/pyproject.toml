@@ -1,0 +1,19 @@
+[project]
+name = "team10-federated-learning"
+version = "0.1.0"
+description = "NVFlare federated training of a non-linear X -> Y classifier on the simulated multi-site data"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "nvflare>=2.6",
+    "torch>=2.4",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
