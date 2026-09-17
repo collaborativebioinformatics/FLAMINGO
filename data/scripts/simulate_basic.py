@@ -92,31 +92,72 @@ def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y,
     return _frame(n, G, U, X, Y), truth
 
 
+def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
+                      weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0):
+    """Cox proportional-hazards outcome: h(t) = h0(t) exp(theta X + gamma_y U).
+
+    h0 is Weibull with shape weibull_k and scale weibull_scale, so event times are
+    T = scale * (-log(V) / exp(lp))^(1/k) with V ~ Uniform(0, 1). theta is the log
+    hazard ratio per unit X. Random censoring is exponential, tuned so about
+    censor_frac of subjects are censored before administrative end of follow-up.
+    Columns `time` and `event` replace `Y`.
+    """
+    rng = np.random.default_rng(seed)
+    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    lp = theta * X + gamma_y * U
+    T = weibull_scale * (-np.log(rng.uniform(size=n)) / np.exp(lp)) ** (1.0 / weibull_k)
+
+    # exponential censoring rate chosen so P(C < T) ~ censor_frac, then cap at follow-up
+    median_T = np.median(T)
+    rate = -np.log(1.0 - censor_frac) / median_T if censor_frac > 0 else 0.0
+    C = rng.exponential(1.0 / rate, n) if rate > 0 else np.full(n, np.inf)
+    C = np.minimum(C, followup)
+    time = np.minimum(T, C)
+    event = (T <= C).astype(np.int8)
+
+    snp_cols = {f"snp{j}": G[:, j] for j in range(n_snps)}
+    df = pl.DataFrame({"id": np.arange(n), **snp_cols, "U": U, "X": X, "time": time, "event": event})
+    truth = {
+        "model": "cox", "theta": theta, "hazard_ratio": float(np.exp(theta)),
+        "weibull_k": weibull_k, "weibull_scale": weibull_scale,
+        "censor_frac": censor_frac, "followup": followup, "event_rate": float(event.mean()),
+        "n": n, "n_snps": n_snps, "h2_x": h2_x,
+        "gamma_x": gamma_x, "gamma_y": gamma_y, "seed": seed,
+        "maf": maf.tolist(), "beta": beta.tolist(),
+    }
+    return df, truth
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n", type=int, default=10_000)
     p.add_argument("--n-snps", type=int, default=20)
-    p.add_argument("--shape", choices=["linear", "quadratic", "threshold"], default="linear",
-                   help="form of the X -> Y link")
-    p.add_argument("--theta", type=float, default=0.3, help="linear slope (theta, or theta1 when non-linear)")
+    p.add_argument("--shape", choices=["linear", "quadratic", "threshold", "cox"], default="linear",
+                   help="form of the X -> Y link; cox gives a survival outcome (time, event)")
+    p.add_argument("--theta", type=float, default=0.3, help="linear slope (theta, or theta1 when non-linear; log hazard ratio for cox)")
     p.add_argument("--theta2", type=float, default=0.0,
                    help="quadratic: coefficient on X^2; threshold: X value above which the effect stops")
     p.add_argument("--h2-x", type=float, default=0.10, help="Var(X) explained by SNPs")
     p.add_argument("--gamma-x", type=float, default=0.3, help="confounder effect on X")
     p.add_argument("--gamma-y", type=float, default=0.3, help="confounder effect on Y")
+    p.add_argument("--censor-frac", type=float, default=0.3, help="cox: target fraction randomly censored")
+    p.add_argument("--followup", type=float, default=15.0, help="cox: administrative end of follow-up")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--out", type=Path, default=Path("simulated_data/basic"))
     a = p.parse_args()
 
     if a.shape == "linear":
         df, truth = simulate(a.n, a.n_snps, a.theta, a.h2_x, a.gamma_x, a.gamma_y, a.seed)
+    elif a.shape == "cox":
+        df, truth = simulate_survival(a.n, a.n_snps, a.theta, a.h2_x, a.gamma_x, a.gamma_y, a.seed,
+                                      censor_frac=a.censor_frac, followup=a.followup)
     else:
         df, truth = simulate_nonlinear(a.n, a.n_snps, a.shape, a.theta, a.theta2,
                                        a.h2_x, a.gamma_x, a.gamma_y, a.seed)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    df.write_parquet(a.out.with_suffix(".parquet"))
+    df.write_csv(a.out.with_suffix(".csv"))
     a.out.with_suffix(".truth.json").write_text(json.dumps(truth, indent=1))
-    print(f"wrote {a.out}.parquet ({df.height} rows, {df.width} cols) and {a.out}.truth.json")
+    print(f"wrote {a.out}.csv ({df.height} rows, {df.width} cols) and {a.out}.truth.json")
 
 
 if __name__ == "__main__":

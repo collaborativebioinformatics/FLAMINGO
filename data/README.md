@@ -13,7 +13,8 @@ the parameter files used to generate benchmark datasets.
 | `docs/package-survey.md` | Existing simulators (simmrd, simulateGP, GWASBrewer) and the within-family gap |
 | `docs/basic-simulator-parameters.md` | Parameter table for the Python simulator, fixed quantities, outputs |
 | `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
-| `scripts/simulate_basic.py` | Pure-Python generator for the base model, no pleiotropy, no LD |
+| `scripts/simulate_basic.py` | Pure-Python generator: linear, quadratic, threshold, or Cox survival outcome; no pleiotropy, no LD |
+| `scripts/check_survival.py` | Naive, 2SPS, 2SRI and oracle Cox fits against the true log hazard ratio |
 | `simulated_data/basic.truth.json` | True parameters of the checked-in baseline draw |
 | `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
 | `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
@@ -25,9 +26,9 @@ uv run python scripts/simulate_basic.py            # defaults: n=10000, 20 SNPs,
 uv run python scripts/simulate_basic.py --help     # all knobs
 ```
 
-Writes `simulated_data/basic.parquet` (id, snp0..snpJ, U, X, Y) and `simulated_data/basic.truth.json`
+Writes `simulated_data/basic.csv` (id, snp0..snpJ, U, X, Y) and `simulated_data/basic.truth.json`
 (theta, MAFs, per-SNP betas, confounder strengths, seed). Both are checked in;
-the parquet can be regenerated from the seed in the truth file. Sanity check on the
+the CSV can be regenerated from the seed in the truth file. Sanity check on the
 default seed: naive OLS 0.39, 2SLS through the SNPs 0.29, true theta 0.30.
 
 ## simmrd scenarios (R, optional)

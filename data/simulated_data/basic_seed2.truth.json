@@ -1,4 +1,5 @@
 {
+ "model": "linear",
  "n": 10000,
  "n_snps": 20,
  "theta": 0.3,

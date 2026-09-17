@@ -27,10 +27,10 @@ which adds `--seeds` for the number of replicates.
 
 | File | Contents |
 |---|---|
-| `simulated_data/<name>.parquet` | One row per individual: `id`, `snp0..snpJ`, `U`, `X`, `Y` |
+| `simulated_data/<name>.csv` | One row per individual: `id`, `snp0..snpJ`, `U`, `X`, `Y` |
 | `simulated_data/<name>.truth.json` | The seven parameters above plus the drawn MAFs and per-SNP betas |
 
-`U` is written to the parquet as an oracle for checks. Neither the naive OLS
+`U` is written to the CSV as an oracle for checks. Neither the naive OLS
 nor the 2SLS estimator in `sweep_seeds.py` uses it, and it must not be given
 to an MR method under test.
 
@@ -61,3 +61,44 @@ Single-seed check (n = 10000, default confounding):
 
 Linear 2SLS recovers the average slope in both cases. It says nothing about
 the curvature or the cutoff, which is what a non-linear MR method has to add.
+
+## Survival outcome: `simulate_survival()` (`--shape cox`)
+
+Same SNPs, confounder and exposure. The outcome is an event time under a Cox
+proportional-hazards model with a Weibull baseline:
+
+```
+h(t | X, U) = h0(t) exp(theta X + gamma_y U)
+T = scale * (-log V / exp(theta X + gamma_y U))^(1/k),   V ~ Uniform(0, 1)
+```
+
+`theta` is the log hazard ratio per unit of X. Columns `time` and `event`
+replace `Y`.
+
+| Parameter | CLI flag | Default | Controls |
+|---|---|---|---|
+| `weibull_k` | fixed | 1.5 | Baseline shape; > 1 means hazard rises with time |
+| `weibull_scale` | fixed | 10 | Baseline time scale |
+| `censor_frac` | `--censor-frac` | 0.3 | Target share censored by an exponential censoring time |
+| `followup` | `--followup` | 15 | Administrative end of follow-up |
+
+The truth file adds `hazard_ratio` and the realised `event_rate`.
+
+`scripts/check_survival.py` fits four Cox models to a dataset: naive (X only),
+2SPS (SNP-predicted X), 2SRI (X plus first-stage residual), and oracle (X and
+U). Over 40 seeds at the defaults (event rate about 0.6):
+
+| estimator | mean | sd | bias |
+|---|---|---|---|
+| naive | 0.374 | 0.014 | +0.074 |
+| 2SPS | 0.271 | 0.040 | -0.029 |
+| 2SRI | 0.287 | 0.040 | -0.013 |
+| oracle | 0.300 | 0.014 | 0.000 |
+
+The oracle is unbiased, which confirms the simulation. The two MR estimators
+remove most of the confounding but sit below the truth. That is the known
+non-collapsibility of the hazard ratio: conditioning on a noisy proxy for X
+(2SPS) or leaving part of X's variation unexplained shrinks the coefficient
+toward zero even without confounding. The bias grows with the exposure
+variance the instruments do not capture, so it is a property of Cox MR, not
+of this simulator.
