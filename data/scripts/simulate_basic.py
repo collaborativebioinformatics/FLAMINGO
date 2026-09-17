@@ -114,7 +114,7 @@ def main():
         df, truth = simulate_nonlinear(a.n, a.n_snps, a.shape, a.theta, a.theta2,
                                        a.h2_x, a.gamma_x, a.gamma_y, a.seed)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    df.write_parquet(a.out.with_suffix(".parquet"))
+    df.write_csv(a.out.with_suffix(".csv"))
     a.out.with_suffix(".truth.json").write_text(json.dumps(truth, indent=1))
     print(f"wrote {a.out}.parquet ({df.height} rows, {df.width} cols) and {a.out}.truth.json")
 
