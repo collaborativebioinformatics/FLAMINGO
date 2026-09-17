@@ -27,7 +27,12 @@ X_GRID = np.linspace(-3.0, 3.0, 61, dtype=np.float32)
 
 def load_manifest(data_dir):
     with open(os.path.join(data_dir, "manifest.json")) as f:
-        return json.load(f)
+        m = json.load(f)
+    if not m.get("shape"):
+        # older manifests (the quadratic set) carry no shape key; the folder name has it
+        name = os.path.basename(os.path.normpath(data_dir))
+        m["shape"] = next((s for s in ("quadratic", "threshold", "linear", "cox") if s in name), "linear")
+    return m
 
 
 def true_curve(manifest, x):
