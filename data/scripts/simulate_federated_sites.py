@@ -67,6 +67,8 @@ def main():
     p.add_argument("--h2x-kappa", type=float, default=40.0, help="Beta concentration for h2_x (higher = tighter)")
     p.add_argument("--gamma-mean", type=float, default=0.3, help="mean confounder effect (gamma_x, gamma_y)")
     p.add_argument("--gamma-kappa", type=float, default=20.0, help="Beta concentration for gamma_x, gamma_y")
+    p.add_argument("--censor-frac", type=float, default=0.3, help="cox: target fraction randomly censored")
+    p.add_argument("--followup", type=float, default=15.0, help="cox: administrative end of follow-up")
     p.add_argument("--seed", type=int, default=1, help="base seed; site i uses seed + i for its own SNPs/individuals")
     p.add_argument("--out", type=Path, default=None,
                    help="output directory; default simulated_data/federated/<shape>")
@@ -89,7 +91,8 @@ def main():
             df, truth = simulate(*common, a.theta1, *nuisance)
             truth["avg_slope"] = a.theta1
         elif a.shape == "cox":
-            df, truth = simulate_survival(*common, a.theta1, *nuisance)
+            df, truth = simulate_survival(*common, a.theta1, *nuisance,
+                                          censor_frac=a.censor_frac, followup=a.followup)
             truth["avg_slope"] = a.theta1
         else:
             df, truth = simulate_nonlinear(*common, a.shape, a.theta1, a.theta2, *nuisance)
@@ -98,6 +101,7 @@ def main():
         (a.out / f"{site_id}.truth.json").write_text(json.dumps(truth, indent=1))
         manifest.append({
             "site_id": site_id, "n": int(n[i]), "h2_x": float(h2_x[i]),
+            **({"events": int(df["event"].sum())} if a.shape == "cox" else {}),
             "gamma_x": float(gamma_x[i]), "gamma_y": float(gamma_y[i]),
             "avg_slope": truth["avg_slope"], "seed": site_seed,
         })
@@ -108,6 +112,7 @@ def main():
     manifest_df.write_csv(a.out / "manifest.csv")
     (a.out / "manifest.json").write_text(json.dumps({
         "shape": a.shape, "theta1": a.theta1, "theta2": a.theta2, "n_snps": a.n_snps, "seed": a.seed,
+        **({"censor_frac": a.censor_frac, "followup": a.followup} if a.shape == "cox" else {}),
         "sites": manifest,
     }, indent=1))
     print(f"\nwrote {a.n_sites} sites to {a.out}/ (site01..site{a.n_sites:02d}.csv + .truth.json) "
