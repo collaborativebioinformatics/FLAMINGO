@@ -9,6 +9,7 @@ the parameter files used to generate benchmark datasets.
 
 | Path | What |
 |---|---|
+| `docs/simulation-models.md` | Every model in one place: exposure model, causal curves, outcome types, generators, checked-in datasets |
 | `docs/mr-simulation-model.md` | The data-generating model and the knobs an MR benchmark should vary |
 | `docs/package-survey.md` | Existing simulators (simmrd, simulateGP, GWASBrewer) and the within-family gap |
 | `docs/basic-simulator-parameters.md` | Parameter table for the Python simulator, fixed quantities, outputs |
