@@ -105,7 +105,7 @@ def main():
     p.add_argument("--gamma-x", type=float, default=0.3, help="confounder effect on X")
     p.add_argument("--gamma-y", type=float, default=0.3, help="confounder effect on Y")
     p.add_argument("--seed", type=int, default=1)
-    p.add_argument("--out", type=Path, default=Path("data/basic"))
+    p.add_argument("--out", type=Path, default=Path("simulated_data/basic"))
     a = p.parse_args()
 
     if a.shape == "linear":

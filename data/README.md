@@ -14,7 +14,7 @@ the parameter files used to generate benchmark datasets.
 | `docs/basic-simulator-parameters.md` | Parameter table for the Python simulator, fixed quantities, outputs |
 | `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
 | `scripts/simulate_basic.py` | Pure-Python generator for the base model, no pleiotropy, no LD |
-| `data/basic.truth.json` | True parameters of the checked-in baseline draw |
+| `simulated_data/basic.truth.json` | True parameters of the checked-in baseline draw |
 | `simmrd/params/*.yaml` | Parameter files for the simmrd CLI, one per scenario |
 | `simmrd/README.md` | How to run the simmrd CLI against these parameter files |
 
@@ -25,9 +25,9 @@ uv run python scripts/simulate_basic.py            # defaults: n=10000, 20 SNPs,
 uv run python scripts/simulate_basic.py --help     # all knobs
 ```
 
-Writes `data/basic.parquet` (id, snp0..snpJ, U, X, Y) and `data/basic.truth.json`
-(theta, MAFs, per-SNP betas, confounder strengths, seed). The parquet is
-gitignored; regenerate it from the truth file's seed. Sanity check on the
+Writes `simulated_data/basic.parquet` (id, snp0..snpJ, U, X, Y) and `simulated_data/basic.truth.json`
+(theta, MAFs, per-SNP betas, confounder strengths, seed). Both are checked in;
+the parquet can be regenerated from the seed in the truth file. Sanity check on the
 default seed: naive OLS 0.39, 2SLS through the SNPs 0.29, true theta 0.30.
 
 ## simmrd scenarios (R, optional)
