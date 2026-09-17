@@ -101,6 +101,72 @@ value; that weak-instrument bias is the next thing to test, either by
 increasing site sizes or by splitting each site into exposure and outcome
 halves for a two-sample design.
 
+## The three analysis families on every plot
+
+Each `results/sumstats.<shape>.png` ends with one row per family below the
+site rows, coloured by family:
+
+| family | row(s) | what leaves each site | estimate |
+|---|---|---|---|
+| sumstats (orange) | `sumstats` (per-SNP), and `sumstats: site models` for curved shapes | per-SNP GWAS effects; or a fitted model's coefficients and covariance | inverse-variance meta-analysis, with CI |
+| federated (green) | `federated` | model weights each round, via NVFlare FedAvg | the last-round global 2SRI model from `../federated_learning/results/2sri/<dataset>/curves.csv`, summarised into the plot's parameters by least squares on the curve over -2 <= X <= 2; no CI |
+| concatenated (black) | `concatenated` | individual rows | one 2SLS (or stratified 2SPS Cox), with CI |
+
+Grey ticks on any row are the corresponding fit without instruments: naive
+OLS or Cox at a site, the pooled naive fit, and the NVFlare `naive` model on
+the federated row. The federated row is read from the NVFlare results at
+plot time, so it reflects whatever run is on disk; the script says so when
+no run exists.
+
+Federated 2SRI values as read from the runs on disk at the time of writing:
+
+| dataset | federated 2SRI | federated naive | truth or target |
+|---|---|---|---|
+| linear | 0.213 | 0.359 | 0.30 |
+| cox (log HR) | 0.504 | 0.374 | 0.30 |
+| cox_rare (log HR) | 0.500 | 0.432 | 0.30 |
+| quadratic (θ1, θ2) | 0.279, 0.143 | 0.366, 0.150 | 0.30, 0.15 |
+| ushape (θ1, θ2) | 0.025, 0.130 | 0.087, 0.132 | 0, 0.15 |
+| threshold (θ1, θ2) | 0.148, -0.059 | 0.276, -0.065 | avg slope 0.21 |
+
+The federated MLP recovers the curvature of the quadratic sets well and
+removes most of the confounding, but its slopes sit further from the truth
+than either the sumstats or concatenated estimates, and on the survival sets
+it overshoots the log hazard ratio. Without a standard error it is not
+possible to say from one run how much of that is noise; a seed sweep of the
+NVFlare job would be the way to find out.
+
+## Curved models: two parameters
+
+For `quadratic` and `threshold` the forest plot has two columns, `theta1`
+(slope at X = 0) and `theta2` (curvature in a quadratic basis), and a third
+combined row. The three federation levels it compares:
+
+| level | what leaves each site | can estimate |
+|---|---|---|
+| per-SNP sumstats | per-SNP `beta_x`, `beta_y` and standard errors | average slope only; `theta2` is not identifiable |
+| model sumstats | the site's own quadratic 2SLS: two coefficients and their 2x2 covariance | both, via a multivariate inverse-variance meta-analysis |
+| concatenated | individual rows | both, in one quadratic 2SLS with site intercepts |
+
+Per-site rows show the local quadratic fit (filled, both columns) and the
+per-SNP IVW slope (hollow, first column only).
+
+| set | route | θ1 | θ2 |
+|---|---|---|---|
+| quadratic (θ1 0.30, θ2 0.15) | model sumstats | 0.318 (0.015) | 0.156 (0.031) |
+| | concatenated | 0.317 (0.014) | 0.149 (0.031) |
+| ushape (θ1 0, θ2 0.15) | model sumstats | 0.018 (0.015) | 0.156 (0.031) |
+| | concatenated | 0.017 (0.014) | 0.149 (0.031) |
+| threshold (kink at 0.5) | model sumstats | 0.225 (0.015) | -0.045 (0.031) |
+| | concatenated | 0.225 (0.014) | -0.053 (0.031) |
+
+Sharing fitted model parameters instead of GWAS rows recovers the curve with
+the same precision as pooling the data: `theta2` standard errors are equal to
+three decimals and the estimates differ by 0.007. Per-site `theta2` intervals
+are wide, since the squared prediction is a weak instrument at F around 10,
+but the meta-analysis lands on the truth. Per-SNP summary statistics cannot
+produce `theta2` at all, which the plot marks in the second column.
+
 ## Summary statistics versus concatenated
 
 The last row concatenates all ten sites' individual-level data and fits one

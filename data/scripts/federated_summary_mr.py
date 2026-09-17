@@ -32,7 +32,8 @@ from lifelines import CoxPHFitter
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-SITE_COLOR, META_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1f1f1e", "#6b6a63", "#e6e5df"
+SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1baf7a", "#1f1f1e", "#6b6a63", "#e6e5df"
+FL_RESULTS = Path(__file__).resolve().parents[2] / "federated_learning" / "results"
 
 
 def gwas(G, y):
@@ -85,6 +86,32 @@ def pooled_2sps_cox(sites):
             float(naive.params_["X"]))
 
 
+def tsls(D, Z, Y):
+    """Generic 2SLS of Y on regressors D with instruments Z. Returns (coef, covariance)."""
+    Dhat = Z @ np.linalg.lstsq(Z, D, rcond=None)[0]
+    coef = np.linalg.lstsq(Dhat, Y, rcond=None)[0]
+    resid = Y - D @ coef
+    sigma2 = resid @ resid / (len(Y) - D.shape[1])
+    return coef, sigma2 * np.linalg.inv(Dhat.T @ Dhat)
+
+
+def quadratic_2sls(sites):
+    """2SLS with X and X^2 as endogenous regressors, instrumented by the SNP-predicted X and its
+    square, with site intercepts. Returns (theta[2], cov[2x2]). A single site is a list of one."""
+    xhat, X, Y, site_idx = _first_stage(sites)
+    S = np.eye(len(sites))[site_idx]
+    coef, cov = tsls(np.column_stack([X, X**2, S]), np.column_stack([xhat, xhat**2, S]), Y)
+    return coef[:2], cov[:2, :2]
+
+
+def multivariate_meta(thetas, covs):
+    """Inverse-variance meta-analysis of vector estimates with their covariances."""
+    W = [np.linalg.inv(c) for c in covs]
+    cov = np.linalg.inv(sum(W))
+    theta = cov @ sum(w @ t for w, t in zip(W, thetas))
+    return theta, cov
+
+
 def pooled_2sls(sites: list[tuple[np.ndarray, np.ndarray, np.ndarray]]):
     """Concatenate all sites and fit one 2SLS with site-specific first stages and site intercepts."""
     xhat, X, Y, site_idx = _first_stage(sites)
@@ -99,7 +126,7 @@ def pooled_2sls(sites: list[tuple[np.ndarray, np.ndarray, np.ndarray]]):
     return float(coef[0]), float(se), float(naive)
 
 
-def site_summary(csv: Path, sumstats_dir: Path, survival: bool) -> dict:
+def site_summary(csv: Path, sumstats_dir: Path, survival: bool, curved: bool = False) -> dict:
     df = pl.read_csv(csv)
     G = df.select(pl.col("^snp.*$")).to_numpy().astype(float)
     X = df["X"].to_numpy()
@@ -123,44 +150,173 @@ def site_summary(csv: Path, sumstats_dir: Path, survival: bool) -> dict:
     est, se = ivw(bx, by, se_y)
     f_stat = float(np.mean((bx / se_x) ** 2))
     truth = json.loads(csv.with_suffix(".truth.json").read_text())
-    return {"site": site, "n": df.height, "avg_slope": truth["avg_slope"],
-            "ivw": est, "ivw_se": se, "naive_ols": naive, "mean_F": f_stat}
+    row = {"site": site, "n": df.height, "avg_slope": truth["avg_slope"],
+           "ivw": est, "ivw_se": se, "naive_ols": naive, "mean_F": f_stat}
+    if curved:
+        # site-level model summary: the site fits the quadratic 2SLS on its own data and shares
+        # the two coefficients and their covariance, never individual rows
+        th, cov = quadratic_2sls([site_summary.raw[-1]])
+        site_summary.models.append((th, cov))
+        row.update({"q_theta1": float(th[0]), "q_theta1_se": float(np.sqrt(cov[0, 0])),
+                    "q_theta2": float(th[1]), "q_theta2_se": float(np.sqrt(cov[1, 1]))})
+    return row
 
 
 site_summary.raw = []
+site_summary.models = []
 
 
-def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, target, target_label, shape, out: Path):
+def _family_rows(ax, y_sites, rows_y, res, n_all, families):
+    """Y tick labels for site rows and the family-grouped combined rows."""
+    ticks = list(y_sites) + [rows_y[k] for k in families]
+    labels = [f"{s}  (n={n:,}, F={f:.0f})" for s, n, f in zip(res["site"], res["n"], res["mean_F"])]
+    labels += [f"{families[k]}  (n={n_all:,})" for k in families]
+    ax.set_yticks(ticks)
+    ax.set_yticklabels(labels, fontsize=9)
+
+
+def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, target_label, shape, out: Path):
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
-    fig, ax = plt.subplots(figsize=(8, 6.4), dpi=150)
+    rows_y = {"sumstats": -1, "federated": -2.2, "pooled": -3.4}
+    fig, ax = plt.subplots(figsize=(8, 6.6), dpi=150)
     ax.axvline(target, color=INK, linewidth=1.2, linestyle="--")
     ax.errorbar(res["ivw"], y, xerr=1.96 * res["ivw_se"], fmt="o", color=SITE_COLOR, ms=6,
                 ecolor=SITE_COLOR, elinewidth=2, capsize=0, label="site IVW (95% CI)")
-    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="site naive OLS", zorder=3)
-    ax.errorbar([meta], [-1], xerr=[1.96 * meta_se], fmt="D", color=META_COLOR, ms=8,
-                ecolor=META_COLOR, elinewidth=3, label="sumstats: meta-analysis of site IVW")
+    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="naive fit (no instruments)", zorder=3)
+    ax.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
+                ecolor=SUMSTATS_COLOR, elinewidth=3, label="sumstats: meta-analysis of site IVW")
+    if "2sri" in fl:
+        ax.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
+                   label="federated: NVFlare 2SRI, global model (no CI)")
+    if "naive" in fl:
+        ax.scatter([fl["naive"][0]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
     pooled_label = "concatenated: one stratified 2SPS Cox" if shape == "cox" else "concatenated: one pooled 2SLS"
-    ax.errorbar([pooled], [-2], xerr=[1.96 * pooled_se], fmt="s", color=INK, ms=7,
+    ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=INK, ms=7,
                 ecolor=INK, elinewidth=3, label=pooled_label)
-    ax.scatter([pooled_naive], [-2], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
-    ax.axhline(-0.5, color=GRID, linewidth=0.8)
-    n_all = res["n"].sum()
-    ax.set_yticks(list(y) + [-1, -2])
-    ax.set_yticklabels([f"{s}  (n={n:,}, F={f:.0f})" for s, n, f in zip(sites, res["n"], res["mean_F"])]
-                       + [f"sumstats  (n={n_all:,})", f"concatenated  (n={n_all:,})"], fontsize=9)
+    ax.scatter([pooled_naive], [rows_y["pooled"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
+    ax.axhline(-0.4, color=GRID, linewidth=0.8)
+    if "2sri" not in fl:
+        ax.text(0.5, rows_y["federated"], "no NVFlare 2SRI run for this dataset", transform=ax.get_yaxis_transform(),
+                ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
+    _family_rows(ax, y, rows_y, res, res["n"].sum(),
+                 {"sumstats": "sumstats", "federated": "federated", "pooled": "concatenated"})
     ax.set_xlabel("estimated log hazard ratio per unit X" if shape == "cox" else "estimated causal effect of X on Y")
-    ax.set_title(f"{shape} model: MR from per-site GWAS summary statistics\ndashed line: {target_label}",
+    ax.set_title(f"{shape} model: sumstats vs federated vs concatenated\ndashed line: {target_label}",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, fontsize=9)
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
-    for s in ("left", "bottom"):
-        ax.spines[s].set_color(GRID)
+    _style(ax)
+    fig.tight_layout()
+    fig.savefig(out)
+
+
+def fl_curve(method: str, dataset: str):
+    """Last-round global-model curve f(x) from the NVFlare run, or None if that run is missing."""
+    path = FL_RESULTS / method / dataset / "curves.csv"
+    if not path.exists():
+        return None
+    df = pl.read_csv(path)
+    last = df.filter(pl.col("round") == pl.col("round").max())
+    c = last.group_by("x").agg(pl.col("f").mean()).sort("x")
+    return c["x"].to_numpy(), c["f"].to_numpy()
+
+
+def fl_params(dataset: str, curved: bool, x_max: float = 2.0):
+    """Summarise the federated curves into the forest's parameters by least squares on |x| <= x_max.
+    Returns {"2sri": (theta1, theta2) or (slope,), "naive": ...} for the runs that exist."""
+    out = {}
+    for method in ("2sri", "naive"):
+        c = fl_curve(method, dataset)
+        if c is None:
+            continue
+        x, f = c
+        keep = np.abs(x) <= x_max
+        basis = np.column_stack([x[keep], x[keep] ** 2]) if curved else x[keep][:, None]
+        coef = np.linalg.lstsq(basis, f[keep] - np.interp(0.0, x, f), rcond=None)[0]
+        out[method] = tuple(float(v) for v in coef)
+    return out
+
+
+def _style(ax):
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        ax.spines[sp].set_color(GRID)
     ax.tick_params(colors=MUTED)
     ax.grid(axis="x", color=GRID, linewidth=0.6)
     ax.set_axisbelow(True)
-    fig.tight_layout()
+
+
+def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_cov, pooled_naive, fl,
+                  avg_slope_target, shape, theta1, theta2, out: Path):
+    """Two columns, one per parameter of the quadratic basis. Rows: sites, then the three families."""
+    sites = res["site"].to_list()
+    y = np.arange(len(sites))[::-1]
+    rows_y = {"sumstats": -1, "models": -1.9, "federated": -3.1, "pooled": -4.3}
+    fig, axes = plt.subplots(1, 2, figsize=(11, 6.8), dpi=150, sharey=True,
+                             gridspec_kw={"width_ratios": [1.15, 1]})
+    ax1, ax2 = axes
+    n_all = res["n"].sum()
+
+    # column 1: theta1 (slope at X = 0)
+    ax1.axvline(theta1, color=INK, linewidth=1.2, linestyle="--")
+    if abs(avg_slope_target - theta1) > 0.01:
+        ax1.axvline(avg_slope_target, color=MUTED, linewidth=1.2, linestyle=":")
+    ax1.errorbar(res["q_theta1"], y, xerr=1.96 * res["q_theta1_se"], fmt="o", color=SITE_COLOR, ms=6,
+                 ecolor=SITE_COLOR, elinewidth=2, label="site model: local quadratic 2SLS (95% CI)")
+    ax1.scatter(res["ivw"], y, marker="o", s=34, facecolor="white", edgecolor=SUMSTATS_COLOR, linewidths=1.6, zorder=4,
+                label="site per-SNP IVW (average slope)")
+    ax1.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, zorder=3, label="naive fit (no instruments)")
+    ax1.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
+                 ecolor=SUMSTATS_COLOR, elinewidth=3, label="per-SNP sumstats: meta of site IVW")
+    ax1.errorbar([model_meta[0]], [rows_y["models"]], xerr=[1.96 * np.sqrt(model_cov[0, 0])], fmt="D",
+                 mfc="white", color=SUMSTATS_COLOR, ms=8, ecolor=SUMSTATS_COLOR, elinewidth=3,
+                 label="model sumstats: meta of site (θ1, θ2)")
+    if "2sri" in fl:
+        ax1.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
+                    label="federated: NVFlare 2SRI, global model (no CI)")
+        ax2.scatter([fl["2sri"][1]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4)
+    else:
+        ax1.text(0.5, rows_y["federated"], "no NVFlare 2SRI run for this dataset", transform=ax1.get_yaxis_transform(),
+                 ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
+    if "naive" in fl:
+        ax1.scatter([fl["naive"][0]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
+        ax2.scatter([fl["naive"][1]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
+    ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s", color=INK,
+                 ms=7, ecolor=INK, elinewidth=3, label="concatenated: one quadratic 2SLS")
+    ax1.scatter([pooled_naive], [rows_y["pooled"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
+    ax1.set_xlabel("θ1: slope at X = 0")
+    slope_note = "" if abs(avg_slope_target - theta1) <= 0.01 else f";  dotted: average slope {avg_slope_target:.2f}"
+    ax1.set_title(f"dashed: true θ1 = {theta1}{slope_note}", loc="left", fontsize=10, color=INK)
+
+    # column 2: theta2 (curvature)
+    if shape == "quadratic":
+        ax2.axvline(theta2, color=INK, linewidth=1.2, linestyle="--")
+        ax2.set_title(f"dashed: true θ2 = {theta2}", loc="left", fontsize=10, color=INK)
+    else:
+        ax2.axvline(0, color=GRID, linewidth=1.2)
+        ax2.set_title(f"no true θ2 (kink at X = {theta2}); negative = saturation",
+                      loc="left", fontsize=10, color=INK)
+    ax2.errorbar(res["q_theta2"], y, xerr=1.96 * res["q_theta2_se"], fmt="o", color=SITE_COLOR, ms=6,
+                 ecolor=SITE_COLOR, elinewidth=2)
+    ax2.errorbar([model_meta[1]], [rows_y["models"]], xerr=[1.96 * np.sqrt(model_cov[1, 1])], fmt="D",
+                 mfc="white", color=SUMSTATS_COLOR, ms=8, ecolor=SUMSTATS_COLOR, elinewidth=3)
+    ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s", color=INK,
+                 ms=7, ecolor=INK, elinewidth=3)
+    ax2.text(0.5, rows_y["sumstats"], "not identifiable from per-SNP summary statistics", transform=ax2.get_yaxis_transform(),
+             ha="center", va="center", fontsize=9, color=SUMSTATS_COLOR, style="italic")
+    ax2.set_xlabel("θ2: curvature")
+
+    for ax in axes:
+        ax.axhline(-0.4, color=GRID, linewidth=0.8)
+        _style(ax)
+    _family_rows(ax1, y, rows_y, res, n_all, {"sumstats": "sumstats: per-SNP", "models": "sumstats: site models",
+                                              "federated": "federated", "pooled": "concatenated"})
+    fig.suptitle(f"{shape} model: sumstats vs federated vs concatenated, two parameters of the causal curve",
+                 x=0.01, ha="left", fontsize=11, color=INK)
+    handles, labels = ax1.get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, loc="lower center", ncol=3, fontsize=9, bbox_to_anchor=(0.5, -0.01))
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out)
 
 
@@ -176,8 +332,9 @@ def main():
     manifest = json.loads((a.sites / "manifest.json").read_text())
     sumstats_dir = a.sites / "sumstats"
     sumstats_dir.mkdir(exist_ok=True)
-    site_summary.raw = []
-    rows = [site_summary(csv, sumstats_dir, a.shape == "cox") for csv in sorted(a.sites.glob("site*.csv"))]
+    site_summary.raw, site_summary.models = [], []
+    curved = a.shape in ("quadratic", "threshold")
+    rows = [site_summary(csv, sumstats_dir, a.shape == "cox", curved) for csv in sorted(a.sites.glob("site*.csv"))]
     res = pl.DataFrame(rows)
 
     # what a linear estimator targets: theta for linear/cox, the n-weighted mean of
@@ -198,7 +355,23 @@ def main():
     a.out.parent.mkdir(parents=True, exist_ok=True)
     csv_out, png_out = Path(f"{a.out}.csv"), Path(f"{a.out}.png")
     res.write_csv(csv_out)
-    forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, target, target_label, a.shape, png_out)
+    fl = fl_params(a.sites.name, curved)
+    for method, coef in fl.items():
+        print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + "   (from curve, no CI)")
+    if "2sri" not in fl:
+        print(f"no NVFlare 2SRI run at {FL_RESULTS / '2sri' / a.sites.name}")
+    if curved:
+        model_meta, model_cov = multivariate_meta(*zip(*site_summary.models))
+        pooled_q, pooled_cov = quadratic_2sls(site_summary.raw)
+        forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_cov, pooled_naive, fl,
+                      target, a.shape, manifest["theta1"], manifest["theta2"], png_out)
+        mse = np.sqrt(np.diag(model_cov)); pse = np.sqrt(np.diag(pooled_cov))
+        print(f"model sumstats (meta of site quadratic fits): theta1 {model_meta[0]:.3f} ({mse[0]:.3f})  "
+              f"theta2 {model_meta[1]:.3f} ({mse[1]:.3f})")
+        print(f"concatenated quadratic 2SLS:                  theta1 {pooled_q[0]:.3f} ({pse[0]:.3f})  "
+              f"theta2 {pooled_q[1]:.3f} ({pse[1]:.3f})")
+    else:
+        forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, target_label, a.shape, png_out)
 
     with pl.Config(tbl_rows=-1, float_precision=3):
         print(res)
