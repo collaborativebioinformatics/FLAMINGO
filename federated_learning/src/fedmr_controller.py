@@ -48,19 +48,7 @@ class FedMRController(ModelController):
             res.robust_cov = fm.robust_cov(stats, H)
             rounds += 1
 
-        out = {"sites": stats.layout.sites, "N": int(stats.N), "rounds": rounds, "spec": spec,
-               "w_names": res.w_names, "theta": [float(t) for t in res.theta],
-               "se": [res.se(n) for n in res.w_names],
-               "robust_se": [res.se(n, True) for n in res.w_names] if self.robust else None,
-               "rss": res.rss, "sigma2": res.sigma2, "df_resid": res.df_resid,
-               "diagnostics": {"rank_A": res.diagnostics.rank_A, "dim_A": res.diagnostics.dim_A,
-                               "cond_A": res.diagnostics.cond_A, "cond_M": res.diagnostics.cond_M,
-                               "n_endogenous": res.diagnostics.n_endogenous,
-                               "n_instruments": res.diagnostics.n_instruments,
-                               "n_exogenous": res.diagnostics.n_exogenous, "absorbed": res.diagnostics.absorbed,
-                               "first_stage": {k: {kk: (float(vv) if isinstance(vv, (int, float, np.floating))
-                                                        else vv) for kk, vv in v.items()}
-                                               for k, v in res.diagnostics.first_stage.items()}}}
+        out = {"sites": stats.layout.sites, "rounds": rounds, "spec": spec, **res.to_dict()}
         if self.out_path:
             os.makedirs(os.path.dirname(self.out_path), exist_ok=True)
             with open(self.out_path, "w") as f:

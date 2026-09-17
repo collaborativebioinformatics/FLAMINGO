@@ -2,16 +2,15 @@
  "sites": [
   "site02",
   "site01",
-  "site05",
-  "site10",
-  "site06",
   "site08",
-  "site07",
-  "site09",
+  "site05",
   "site04",
-  "site03"
+  "site03",
+  "site07",
+  "site06",
+  "site09",
+  "site10"
  ],
- "N": 55182,
  "rounds": 2,
  "spec": {
   "protocol": "local",
@@ -25,11 +24,12 @@
   0.3169511313104073
  ],
  "se": [
-  0.01445747014332409
+  0.014457470143324089
  ],
  "robust_se": [
   0.014499741390462312
  ],
+ "N": 55182,
  "rss": 60751.15669449428,
  "sigma2": 1.101142931875338,
  "df_resid": 55171,
@@ -44,11 +44,13 @@
   "absorbed": 10,
   "first_stage": {
    "X": {
-    "F": 5752.833883283236,
-    "partial_r2": 0.09442665565506611,
-    "df1": 1.0,
-    "df2": 55171.0,
-    "conditional": 1.0
+    "F": 28.660417994222144,
+    "partial_r2": 0.0944266556550661,
+    "df1": 200.0,
+    "df2": 54972.0,
+    "conditional": 1.0,
+    "source": "local SNP first stages",
+    "generated_instrument_F": 5752.833883283234
    }
   }
  }

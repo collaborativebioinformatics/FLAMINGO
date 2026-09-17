@@ -41,30 +41,46 @@ class SiteStats:
     D: np.ndarray
     e: np.ndarray
     f: float
+    # optional: the site's own first stage on its original SNPs, so the coordinator can report
+    # an F for the SNP set rather than for the single generated instrument
+    fs_rss_full: float = None
+    fs_rss_reduced: float = None
+    fs_n_instruments: int = 0
+    fs_n_params: int = 0
 
     # --- transport: arrays for the payload, plain python for the metadata (e.g. NVFlare FLModel)
-    def arrays(self):
-        return {"A": self.A, "B": self.B, "c": self.c, "D": self.D, "e": self.e,
-                "f": np.array([self.f]), "n": np.array([self.n], dtype=np.float64),
-                "absorbed": np.array([self.absorbed], dtype=np.float64)}
+    def arrays(self) -> dict:
+        scalars = np.array([self.f, self.n, self.absorbed,
+                            np.nan if self.fs_rss_full is None else self.fs_rss_full,
+                            np.nan if self.fs_rss_reduced is None else self.fs_rss_reduced,
+                            self.fs_n_instruments, self.fs_n_params], dtype=np.float64)
+        return {"A": self.A, "B": self.B, "c": self.c, "D": self.D, "e": self.e, "scalars": scalars}
 
-    def meta(self):
+    def meta(self) -> dict:
         return {"site": self.site, "z_names": list(self.z_names), "w_names": list(self.w_names),
                 "z_roles": [Role(r).value for r in self.z_roles], "w_roles": [Role(r).value for r in self.w_roles]}
 
     @classmethod
-    def from_transport(cls, arrays, meta):
-        g = lambda k: np.asarray(arrays[k], dtype=np.float64)
-        return cls(meta["site"], int(round(float(g("n")[0]))), int(round(float(g("absorbed")[0]))),
-                   list(meta["z_names"]), list(meta["w_names"]),
-                   [Role(r) for r in meta["z_roles"]], [Role(r) for r in meta["w_roles"]],
-                   g("A"), g("B"), g("c"), g("D"), g("e"), float(g("f").ravel()[0]))
+    def from_transport(cls, arrays: dict, meta: dict) -> "SiteStats":
+        arr = {k: np.asarray(v, dtype=np.float64) for k, v in arrays.items()}
+        f, n, absorbed, rss_full, rss_red, n_inst, n_par = arr["scalars"].tolist()
+        return cls(site=meta["site"], n=int(round(n)), absorbed=int(round(absorbed)),
+                   z_names=list(meta["z_names"]), w_names=list(meta["w_names"]),
+                   z_roles=[Role(r) for r in meta["z_roles"]], w_roles=[Role(r) for r in meta["w_roles"]],
+                   A=arr["A"], B=arr["B"], c=arr["c"], D=arr["D"], e=arr["e"], f=float(f),
+                   fs_rss_full=None if np.isnan(rss_full) else float(rss_full),
+                   fs_rss_reduced=None if np.isnan(rss_red) else float(rss_red),
+                   fs_n_instruments=int(round(n_inst)), fs_n_params=int(round(n_par)))
 
 
 def site_stats(d: Design) -> SiteStats:
     Z, W, Y = d.Z, d.W, d.Y
-    return SiteStats(d.site, d.n, d.absorbed, list(d.z_names), list(d.w_names), list(d.z_roles), list(d.w_roles),
-                     Z.T @ Z, Z.T @ W, Z.T @ Y, W.T @ W, W.T @ Y, float(Y @ Y))
+    fs = d.first_stage_local or {}
+    return SiteStats(site=d.site, n=d.n, absorbed=d.absorbed, z_names=list(d.z_names), w_names=list(d.w_names),
+                     z_roles=list(d.z_roles), w_roles=list(d.w_roles),
+                     A=Z.T @ Z, B=Z.T @ W, c=Z.T @ Y, D=W.T @ W, e=W.T @ Y, f=float(Y @ Y),
+                     fs_rss_full=fs.get("rss_full"), fs_rss_reduced=fs.get("rss_reduced"),
+                     fs_n_instruments=fs.get("n_instruments", 0), fs_n_params=fs.get("n_params", 0))
 
 
 def site_robust_stats(d: Design, theta_by_name: dict) -> np.ndarray:
@@ -85,17 +101,18 @@ class Stats:
     D: np.ndarray
     e: np.ndarray
     f: float
+    first_stage_local: dict = None   # summed local first-stage diagnostics, or None
 
 
-def _union(named_roles):
-    names, roles = [], []
-    for ns, rs in named_roles:
-        for n, r in zip(ns, rs):
-            if n not in names:
-                names.append(n); roles.append(Role(r))
-            elif roles[names.index(n)] != Role(r):
-                raise ValueError(f"column {n!r} has role {roles[names.index(n)]} at one site and {r} at another")
-    return names, roles
+def _union(named_roles) -> tuple[list, list]:
+    """Insertion-ordered union of (name, role) pairs; a name may not change role between sites."""
+    roles: dict = {}
+    for names, rs in named_roles:
+        for n, r in zip(names, rs):
+            r = Role(r)
+            if roles.setdefault(n, r) != r:
+                raise ValueError(f"column {n!r} has role {roles[n]} at one site and {r} at another")
+    return list(roles), list(roles.values())
 
 
 def build_layout(parts: list[SiteStats]) -> Layout:
@@ -122,7 +139,11 @@ def aggregate(parts: list[SiteStats]) -> Stats:
         e[wr] += p.e
         f += p.f
         N += p.n
-    return Stats(layout, N, A, B, c, D, e, f)
+    fs = None
+    if all(p.fs_rss_full is not None for p in parts):
+        fs = {"rss_full": sum(p.fs_rss_full for p in parts), "rss_reduced": sum(p.fs_rss_reduced for p in parts),
+              "n_instruments": sum(p.fs_n_instruments for p in parts), "n_params": sum(p.fs_n_params for p in parts)}
+    return Stats(layout, N, A, B, c, D, e, f, fs)
 
 
 def aggregate_robust(parts: list[tuple[list, np.ndarray]], layout: Layout) -> np.ndarray:

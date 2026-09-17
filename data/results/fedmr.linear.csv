@@ -1,7 +1,7 @@
-estimator,theta1,se1,robust_se1,theta2,se2,robust_se2,first_stage_F,partial_r2,abs_diff_from_pooled,rounds,what_leaves_site
-concatenated 2SLS,0.31695113131040764,0.014457470143324096,,,,,,,,,individual rows
-FedMR (LocalFirstStage),0.3169511313104073,0.014457470143324089,0.014499741390462312,,,,5752.833883283234,0.0944266556550661,3.3306690738754696e-16,2,"centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n; then H for the robust SE"
-FedMR-CF (5 folds),0.3132252425280696,0.015081573847823812,0.015128073619353446,,,,5245.24867597457,0.08681850977054162,,2,"per-fold first-stage moments, then the same statistics"
-site 2SLS meta-analysis,0.31654353222305565,0.014445281742445484,,,,,,,0.00040759908735199524,,one estimate and SE per site
-per-SNP sumstats IVW,0.3167570305115813,0.015297821836682851,,,,,,,0.00019410079882636877,,"per-SNP beta_x, beta_y, SEs"
-naive OLS (no instruments),0.39129835752692643,,,,,,,,,,""
+estimator,theta1,se1,robust_se1,theta2,se2,robust_se2,first_stage_F,partial_r2,generated_instrument_F,abs_diff_from_pooled,rounds,what_leaves_site
+concatenated 2SLS,0.31695113131040764,0.014457470143324096,,,,,,,,,,individual rows
+FedMR (LocalFirstStage),0.3169511313104073,0.014457470143324089,0.014499741390462312,,,,28.660417994222144,0.0944266556550661,5752.833883283234,3.3306690738754696e-16,2,"centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n (+ first-stage RSS); then H for the robust SE"
+FedMR-CF (5 folds),0.3132252425280696,0.015081573847823812,0.015128073619353446,,,,28.660417994222144,0.0944266556550661,5245.24867597457,,2,"per-fold first-stage moments, then the same statistics"
+site 2SLS meta-analysis,0.31654353222305565,0.014445281742445484,,,,,,,,0.00040759908735199524,,one estimate and SE per site
+per-SNP sumstats IVW,0.3167570305115813,0.015297821836682851,,,,,,,,0.00019410079882636877,,"per-SNP beta_x, beta_y, SEs"
+naive OLS (no instruments),0.39129835752692643,,,,,,,,,,,""

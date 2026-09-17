@@ -6,10 +6,8 @@ flamingo_fedmr.site_stats / site_robust_stats return.
 """
 
 import argparse
-import json
 import os
 
-import numpy as np
 import nvflare.client as flare
 from nvflare.app_common.abstract.fl_model import FLModel, ParamsType
 
@@ -26,7 +24,7 @@ def build_design(site, spec):
             raise SystemExit("NVFlare transport implements SharedInstrument with basis=linear, no cross-fit")
         return P.design_shared(site)
     xhat = P.crossfit_xhat_local(site, P.fold_ids(site.n, k, 0), k) if k else P.local_first_stage(site)
-    return P.design_generated(site, xhat, basis)
+    return P.design_generated(site, xhat, basis, P.local_first_stage_diagnostics(site))
 
 
 def main():

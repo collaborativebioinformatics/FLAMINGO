@@ -16,6 +16,12 @@ R^2 of the excluded instruments given the exogenous columns. With one
 endogenous regressor this is the usual first-stage F. With several (for
 instance X and X^2) it is *not* a conditional (Sanderson-Windmeijer) F and
 should not be read as one; the result says so.
+
+When the excluded instrument is a generated one (a site-local xhat), the F
+of that single column is not the F of the SNP set it was built from. If the
+sites also released their local first-stage residual sums of squares, the
+X column reports the SNP-set F from those ("source": "local SNP first
+stages") and keeps the single-column value as "generated_instrument_F".
 """
 
 from __future__ import annotations
@@ -66,8 +72,21 @@ class FedMRResult:
             raise ValueError("robust covariance not computed; run the robust round")
         return float(np.sqrt(cov[i, i]))
 
-    def theta_by_name(self):
+    def theta_by_name(self) -> dict:
         return dict(zip(self.w_names, map(float, self.theta)))
+
+    def to_dict(self) -> dict:
+        """JSON-serialisable summary (estimates, both SEs, fit statistics, diagnostics)."""
+        d = self.diagnostics
+        fs = {k: {kk: (float(vv) if isinstance(vv, (int, float, np.floating, np.integer)) and not isinstance(vv, bool) else vv)
+                  for kk, vv in v.items() if kk != "pi"} for k, v in d.first_stage.items()}
+        return {"w_names": list(self.w_names), "theta": [float(t) for t in self.theta],
+                "se": [self.se(n) for n in self.w_names],
+                "robust_se": [self.se(n, True) for n in self.w_names] if self.robust_cov is not None else None,
+                "N": int(self.N), "rss": float(self.rss), "sigma2": float(self.sigma2), "df_resid": int(self.df_resid),
+                "diagnostics": {"rank_A": d.rank_A, "dim_A": d.dim_A, "cond_A": d.cond_A, "cond_M": d.cond_M,
+                                "n_endogenous": d.n_endogenous, "n_instruments": d.n_instruments,
+                                "n_exogenous": d.n_exogenous, "absorbed": d.absorbed, "first_stage": fs}}
 
 
 def _solve(A, b, what):
@@ -120,8 +139,17 @@ def first_stage_diagnostics(s: Stats) -> dict:
             rss_red = xx
         df2 = s.N - s.A.shape[0] - lay.absorbed
         F = ((rss_red - rss_full) / m) / (rss_full / df2)
-        out[x] = {"F": float(F), "partial_r2": float((rss_red - rss_full) / rss_red), "df1": m, "df2": int(df2),
-                  "conditional": len(lay.endogenous) == 1}
+        entry = {"F": float(F), "partial_r2": float((rss_red - rss_full) / rss_red), "df1": m, "df2": int(df2),
+                 "conditional": len(lay.endogenous) == 1, "source": "excluded instruments"}
+        if x == "X" and s.first_stage_local:
+            # the sites fitted X ~ [1, G, C] themselves: report the SNP-set F from their summed RSS
+            g = s.first_stage_local
+            df1, df2l = g["n_instruments"], s.N - g["n_params"]
+            entry.update({"generated_instrument_F": entry["F"],
+                          "F": float(((g["rss_reduced"] - g["rss_full"]) / df1) / (g["rss_full"] / df2l)),
+                          "partial_r2": float((g["rss_reduced"] - g["rss_full"]) / g["rss_reduced"]),
+                          "df1": int(df1), "df2": int(df2l), "conditional": True, "source": "local SNP first stages"})
+        out[x] = entry
     return out
 
 

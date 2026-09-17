@@ -195,7 +195,7 @@ def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, targ
         ax.scatter([fl["naive"][0]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
     if fedmr is not None:
         ax.errorbar([fedmr[0]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[1]], fmt="v", color=FEDMR_COLOR, ms=8,
-                    ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR sufficient statistics (= concatenated)")
+                    ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR, exact pooled 2SLS (95% CI)")
     else:
         ax.text(0.5, rows_y["fedmr"], "no FedMR run for this dataset", transform=ax.get_yaxis_transform(),
                 ha="center", va="center", fontsize=9, color=FEDMR_COLOR, style="italic")
@@ -307,7 +307,7 @@ def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_co
         ax2.scatter([fl["naive"][1]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
     if fedmr is not None:
         ax1.errorbar([fedmr[0]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[1]], fmt="v", color=FEDMR_COLOR, ms=8,
-                     ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR sufficient statistics (= concatenated)")
+                     ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR, exact pooled 2SLS (95% CI)")
         ax2.errorbar([fedmr[2]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[3]], fmt="v", color=FEDMR_COLOR, ms=8,
                      ecolor=FEDMR_COLOR, elinewidth=3)
     else:

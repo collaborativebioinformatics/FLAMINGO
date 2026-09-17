@@ -33,7 +33,9 @@ through the origin. `theta2` is not identifiable from these summaries.
 A middle route, each site fitting the quadratic 2SLS locally and sharing its
 two coefficients with their covariance, matches the concatenated fit: see the
 "model sumstats" row of `results/sumstats.quadratic.png` and the curved-model
-section of `federated-summary-mr.md`.
+section of `federated-summary-mr.md`. FedMR (`federated-exact-mr.md`) goes
+one step further and reproduces the concatenated fit exactly from per-site
+cross-product matrices.
 
 Standard errors in parentheses. Plots: `results/nonlinear.quadratic.png`,
 `results/nonlinear.threshold.png`. Each shows the true curve, the pooled fit
@@ -84,6 +86,15 @@ The federated 2SRI is a proper individual-level MR that never moves
 individual data between sites. What it needs beyond the summary-statistics
 route is many rounds of model-weight exchange rather than one exchange of
 per-SNP effects.
+
+**FedMR (violet dotted).** The quadratic 2SLS itself, federated exactly:
+each site fits its first stage, forms `xhat`, and releases the centred
+cross-products of `[xhat, xhat²]`, `[X, X²]` and `Y` (a 3x3, a 3x3 and a few
+vectors); the coordinator sums and solves. The curve is the concatenated
+curve to 1e-16, with the same covariance, in one round. It is drawn on top
+of the pooled fit so that it is visibly the same line. What FedMR cannot do
+is what the 2SRI MLP does on the threshold set: find a shape it was not
+given a basis for. See `federated-exact-mr.md`.
 
 ## What this shows
 

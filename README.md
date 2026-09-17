@@ -28,13 +28,21 @@ uv run python scripts/federated_summary_mr.py --shape quadratic
 # 4. Non-linear MR: pooled quadratic 2SLS vs the summary-statistics line
 uv run python scripts/federated_nonlinear_mr.py --shape quadratic
 
-# 5. Federated learning: NVFlare FedAvg, one simulated client per site
+# 5. FedMR: exact federated 2SLS from summed sufficient statistics (equals the pooled fit)
+uv run python scripts/federated_exact_mr.py --all
+uv run pytest -q                                   # identity tests against the pooled fits
+
+# 6. Federated learning: NVFlare FedAvg, one simulated client per site
 cd ../federated_learning
 uv sync
 uv run python job.py --dataset quadratic
+
+# 7. FedMR through NVFlare: two rounds, no training, checked against the pooled fit
+uv run python fedmr_job.py --all
 ```
 
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
+FedMR is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
 
 
 # Intro
@@ -48,3 +56,4 @@ Mendelian randomization (MR) uses genetic variants as natural experiments to est
 # Further Reading
 
 - [In-depth reasoning](indepth_reasoning.md): more detail on the methods and the reasoning behind them.
+- [FedMR](data/docs/federated-exact-mr.md): exact federated one-sample MR from sufficient statistics, the protocols, the identity checks and the seed sweep; plan and review history in [data/docs/fedmr-plan.md](data/docs/fedmr-plan.md).

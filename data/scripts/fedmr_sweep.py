@@ -11,9 +11,19 @@ simulated in memory with the same generators as the checked-in sets, then:
     site_meta     each site's own 2SLS, inverse-variance meta-analysis
     sumstats      per-SNP GWAS effects, per-site IVW, meta-analysis
 
-Estimand: the n-weighted mean of the site causal effects, which is what a
-site-intercept 2SLS targets when effects differ by site. Reported per
-estimator and level: bias, RMSE, mean SE, coverage of the 95% interval.
+Estimand: what pooled 2SLS with site intercepts converges to when the sites'
+causal effects theta_k differ. With Y_k = theta_k X_k + noise, the
+coordinator's c = sum_k Z_k'Y_k has expectation sum_k B_k theta_k, so
+
+    theta* = (B' A^-1 sum_k B_k theta_k) / (B' A^-1 B)
+
+a first-stage-weighted mean of the theta_k (for the local-first-stage protocol
+the weight of site k is its xhat'X, roughly n_k h2_k), *not* the n_k-weighted
+mean. It is computed per replicate from the realised first-stage matrices.
+The site meta-analysis and sumstats routes are inverse-variance weighted and
+so target a slightly different mean under heterogeneity; their bias is still
+reported against theta*. Reported per estimator and level: bias, RMSE, mean
+SE, coverage of the 95% interval; also the SNP-set first-stage F.
 
     uv run python scripts/fedmr_sweep.py --seeds 100          # ~10 min
     uv run python scripts/fedmr_sweep.py --axis sites --seeds 20
@@ -40,8 +50,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from federated_exact_mr import pooled_2sls_shared  # noqa: E402
 from federated_nonlinear_mr import sumstats_slope  # noqa: E402
 from federated_summary_mr import pooled_2sls  # noqa: E402
+from heterogeneity import Heterogeneity  # noqa: E402
 from simulate_basic import simulate  # noqa: E402
-from simulate_federated_sites import Heterogeneity, sample_site_params  # noqa: E402
+from simulate_federated_sites import sample_site_params  # noqa: E402
 
 INK, MUTED, GRID = "#1f1f1e", "#6b6a63", "#e6e5df"
 COLORS = {"pooled": "#1f1f1e", "fedmr_cf": "#8a2be2", "site_meta": "#2a78d6", "sumstats": "#eb6834"}
@@ -67,7 +78,7 @@ AXES = {
 }
 
 
-def site_sizes(rng, cfg):
+def site_sizes(rng: np.random.Generator, cfg: dict) -> np.ndarray | None:
     K = cfg["n_sites"]
     if cfg["sizes"] == "equal":
         return np.full(K, (cfg["pop_min"] + cfg["pop_max"]) // 2)
@@ -79,7 +90,7 @@ def site_sizes(rng, cfg):
     return None   # default spread from sample_site_params
 
 
-def simulate_sites(cfg, seed):
+def simulate_sites(cfg: dict, seed: int) -> tuple[list, list]:
     rng = np.random.default_rng(seed)
     n, h2_x, gamma_x, gamma_y = sample_site_params(rng, cfg["n_sites"], cfg["pop_min"], cfg["pop_max"],
                                                     cfg["h2x_mean"], cfg["h2x_kappa"], cfg["gamma_mean"],
@@ -97,38 +108,44 @@ def simulate_sites(cfg, seed):
         G = df.select(pl.col("^snp.*$")).to_numpy().astype(float)
         sites.append(fm.SiteData(f"site{i + 1:02d}", G, df["X"].to_numpy(), df["Y"].to_numpy()))
         thetas.append(t1)
-    n = np.array([s.n for s in sites])
-    return sites, float(np.sum(n * np.array(thetas)) / n.sum())
+    return sites, thetas
 
 
-def estimate_all(sites, shared):
+def pooled_estimand(run, thetas: list) -> float:
+    """theta* = (B' A^-1 sum_k B_k theta_k) / (B' A^-1 B) from the run's realised per-site
+    first-stage matrices: the probability limit of the pooled 2SLS under site-specific effects."""
+    st = run.stats
+    xi = st.layout.w_index(["X"])[0]
+    weighted = np.zeros(len(st.layout.z_names))
+    for d, t in zip(run.designs, thetas):
+        zr = st.layout.z_index(d.z_names)
+        weighted[zr] += (d.Z.T @ d.W[:, xi]) * t
+    AinvB = np.linalg.solve(st.A, st.B[:, xi])
+    return float(AinvB @ weighted / (AinvB @ st.B[:, xi]))
+
+
+def estimate_all(sites: list, thetas: list, shared: bool) -> tuple[dict, float, float, float]:
+    """Estimates and SEs per route, the identity gap |FedMR - pooled|, the estimand, and the SNP-set F."""
     raw = [(s.G, s.X, s.Y) for s in sites]
-    out = {}
-    if shared:
-        pooled, pooled_se, _ = pooled_2sls_shared(sites)
-        res = fm.SharedInstrumentFedMR(robust=False).run(sites).result
-        cf = fm.SharedInstrumentFedMR(robust=False, crossfit=5).run(sites).result
-    else:
-        pooled, pooled_se, _ = pooled_2sls(raw)
-        res = fm.LocalFirstStageFedMR(robust=False).run(sites).result
-        cf = fm.LocalFirstStageFedMR(robust=False, crossfit=5).run(sites).result
-    out["pooled"] = (pooled, pooled_se)
-    out["fedmr_cf"] = (cf["X"], cf.se("X"))
-    identity = abs(res["X"] - pooled)
+    Proto = fm.SharedInstrumentFedMR if shared else fm.LocalFirstStageFedMR
+    pooled, pooled_se, _ = pooled_2sls_shared(sites) if shared else pooled_2sls(raw)
+    run = Proto(robust=False).run(sites)
+    cf = Proto(robust=False, crossfit=5).run(sites).result
+    out = {"pooled": (pooled, pooled_se), "fedmr_cf": (cf["X"], cf.se("X"))}
     est, se = zip(*[pooled_2sls([r])[:2] for r in raw])
     w = 1 / np.array(se) ** 2
     out["site_meta"] = (float(np.sum(w * est) / w.sum()), float(np.sqrt(1 / w.sum())))
     out["sumstats"] = sumstats_slope(raw)
-    return out, identity, res.diagnostics.first_stage["X"]["F"]
+    return out, abs(run.result["X"] - pooled), pooled_estimand(run, thetas), run.result.diagnostics.first_stage["X"]["F"]
 
 
-def run_axis(axis, seeds):
+def run_axis(axis: str, seeds: int) -> list:
     rows = []
     for level, over in AXES[axis]:
         cfg = {**BASE, **over}
         for seed in range(1, seeds + 1):
-            sites, target = simulate_sites(cfg, seed)
-            ests, identity, F = estimate_all(sites, cfg["shared_snps"])
+            sites, thetas = simulate_sites(cfg, seed)
+            ests, identity, target, F = estimate_all(sites, thetas, cfg["shared_snps"])
             for name, (e, s) in ests.items():
                 rows.append({"axis": axis, "level": level, "seed": seed, "estimator": name, "est": e, "se": s,
                              "target": target, "identity_diff": identity, "first_stage_F": F})
@@ -146,7 +163,7 @@ def summarize(df: pl.DataFrame) -> pl.DataFrame:
                    mean_F=pl.col("first_stage_F").mean(), seeds=pl.len()))
 
 
-def plot(summary: pl.DataFrame, out: Path):
+def plot(summary: pl.DataFrame, out: Path) -> None:
     axes_present = [a for a in AXES if a in summary["axis"].unique().to_list()]
     fig, axs = plt.subplots(2, len(axes_present), figsize=(3.1 * len(axes_present), 6.4), dpi=150, squeeze=False)
     for j, axis in enumerate(axes_present):
@@ -175,12 +192,13 @@ def plot(summary: pl.DataFrame, out: Path):
     axs[1, 0].set_ylabel("95% coverage")
     handles, labels = axs[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, loc="lower center", ncol=4, fontsize=9)
-    fig.suptitle("FedMR seed sweep: estimand = n-weighted mean site effect", x=0.01, ha="left", fontsize=11, color=INK)
+    fig.suptitle("FedMR seed sweep: estimand = first-stage-weighted mean site effect (the pooled 2SLS limit)",
+                 x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout(rect=(0, 0.06, 1, 0.97))
     fig.savefig(out)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--seeds", type=int, default=100)
     p.add_argument("--axis", action="append", choices=list(AXES), help="repeatable; default all")

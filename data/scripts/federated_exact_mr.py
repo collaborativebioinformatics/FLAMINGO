@@ -27,6 +27,7 @@ dose-response plots pick up, and prints the table.
 import argparse
 import json
 import sys
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -42,11 +43,11 @@ FED = Path("simulated_data/federated")
 SHAPES = ("linear", "quadratic", "ushape", "threshold")   # prefixes: linear_shared etc. count too
 
 
-def raw(sites):
+def raw(sites: list) -> list:
     return [(s.G, s.X, s.Y) for s in sites]
 
 
-def pooled_2sls_shared(sites):
+def pooled_2sls_shared(sites: list) -> tuple[float, float, float]:
     """Reference for shared SNPs: one stacked 2SLS with the common G plus site dummies in Z and W
     (one global first stage with site intercepts). Returns (theta, se, naive)."""
     K = len(sites)
@@ -64,21 +65,43 @@ def pooled_2sls_shared(sites):
     return float(theta[0]), float(se), float(naive)
 
 
-def site_meta_linear(sites):
+def site_meta_linear(sites: list) -> tuple[float, float]:
     est, se = zip(*[pooled_2sls([r])[:2] for r in raw(sites)])
     w = 1 / np.array(se) ** 2
     return float(np.sum(w * est) / np.sum(w)), float(np.sqrt(1 / np.sum(w)))
 
 
-def row(name, theta1, se1, rse1=None, theta2=None, se2=None, rse2=None, F=None, r2=None, diff=None, leaves="",
-        rounds=None):
-    return {"estimator": name, "theta1": theta1, "se1": se1, "robust_se1": rse1,
-            "theta2": theta2, "se2": se2, "robust_se2": rse2,
-            "first_stage_F": F, "partial_r2": r2, "abs_diff_from_pooled": diff, "rounds": rounds,
-            "what_leaves_site": leaves}
+@dataclass(kw_only=True)
+class EstimatorRow:
+    """One line of the comparison table (results/fedmr.<shape>.csv)."""
+    estimator: str
+    theta1: float
+    se1: float = None
+    robust_se1: float = None
+    theta2: float = None
+    se2: float = None
+    robust_se2: float = None
+    first_stage_F: float = None          # F of the SNP set (local first stages) or of the excluded instruments
+    partial_r2: float = None
+    generated_instrument_F: float = None  # F of the single generated xhat column, for reference
+    abs_diff_from_pooled: float = None
+    rounds: int = None
+    what_leaves_site: str = ""
 
 
-def analyse(shape, crossfit, out_dir):
+def fedmr_row(name: str, run, diff: float = None, leaves: str = "", theta2: bool = False) -> EstimatorRow:
+    """Row for a FedMR run: estimates, both SEs and first-stage diagnostics from the result."""
+    r = run.result
+    fs = r.diagnostics.first_stage["X"]
+    return EstimatorRow(estimator=name, theta1=r["X"], se1=r.se("X"), robust_se1=r.se("X", True),
+                        theta2=r["X2"] if theta2 else None, se2=r.se("X2") if theta2 else None,
+                        robust_se2=r.se("X2", True) if theta2 else None,
+                        first_stage_F=fs["F"], partial_r2=fs["partial_r2"],
+                        generated_instrument_F=fs.get("generated_instrument_F"),
+                        abs_diff_from_pooled=diff, rounds=run.rounds, what_leaves_site=leaves)
+
+
+def analyse(shape: str, crossfit: int, out_dir: Path) -> pl.DataFrame:
     folder = FED / shape
     manifest = json.loads((folder / "manifest.json").read_text())
     shared = bool(manifest.get("shared_snps"))
@@ -90,61 +113,56 @@ def analyse(shape, crossfit, out_dir):
 
     if shared:
         pooled, pooled_se, naive = pooled_2sls_shared(sites)
-        rows.append(row("concatenated 2SLS (one shared first stage)", pooled, pooled_se, leaves="individual rows"))
+        rows.append(EstimatorRow(estimator="concatenated 2SLS (one shared first stage)", theta1=pooled, se1=pooled_se,
+                                 what_leaves_site="individual rows"))
         p_site, p_site_se, _ = pooled_2sls(raw(sites))
-        rows.append(row("concatenated 2SLS (per-site first stages)", p_site, p_site_se,
-                        diff=abs(p_site - pooled), leaves="individual rows; a different estimator, for contrast"))
+        rows.append(EstimatorRow(estimator="concatenated 2SLS (per-site first stages)", theta1=p_site, se1=p_site_se,
+                                 abs_diff_from_pooled=abs(p_site - pooled),
+                                 what_leaves_site="individual rows; a different estimator, for contrast"))
     else:
         pooled, pooled_se, naive = pooled_2sls(raw(sites))
-        rows.append(row("concatenated 2SLS", pooled, pooled_se, leaves="individual rows"))
+        rows.append(EstimatorRow(estimator="concatenated 2SLS", theta1=pooled, se1=pooled_se,
+                                 what_leaves_site="individual rows"))
 
     run = Protocol(basis="linear", robust=True).run(sites)
     res = run.result
-    fs = res.diagnostics.first_stage["X"]
-    rows.append(row(f"FedMR ({protocol_name})", res["X"], res.se("X"), res.se("X", True), F=fs["F"],
-                    r2=fs["partial_r2"], diff=abs(res["X"] - pooled), rounds=run.rounds,
-                    leaves="centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n; then H for the robust SE"))
-
-    cfrun = Protocol(basis="linear", robust=True, crossfit=crossfit).run(sites)
-    cf = cfrun.result
-    rows.append(row(f"FedMR-CF ({crossfit} folds)", cf["X"], cf.se("X"), cf.se("X", True),
-                    F=cf.diagnostics.first_stage["X"]["F"], r2=cf.diagnostics.first_stage["X"]["partial_r2"],
-                    rounds=cfrun.rounds, leaves="per-fold first-stage moments, then the same statistics"))
+    rows.append(fedmr_row(f"FedMR ({protocol_name})", run, diff=abs(res["X"] - pooled),
+                          leaves="centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n (+ first-stage RSS); then H for the robust SE"))
+    rows.append(fedmr_row(f"FedMR-CF ({crossfit} folds)", Protocol(basis="linear", robust=True, crossfit=crossfit).run(sites),
+                          leaves="per-fold first-stage moments, then the same statistics"))
 
     meta, meta_se = site_meta_linear(sites)
-    rows.append(row("site 2SLS meta-analysis", meta, meta_se, diff=abs(meta - pooled),
-                    leaves="one estimate and SE per site"))
+    rows.append(EstimatorRow(estimator="site 2SLS meta-analysis", theta1=meta, se1=meta_se,
+                             abs_diff_from_pooled=abs(meta - pooled), what_leaves_site="one estimate and SE per site"))
     slope, slope_se = sumstats_slope(raw(sites))
-    rows.append(row("per-SNP sumstats IVW", slope, slope_se, diff=abs(slope - pooled),
-                    leaves="per-SNP beta_x, beta_y, SEs"))
-    rows.append(row("naive OLS (no instruments)", naive, None))
+    rows.append(EstimatorRow(estimator="per-SNP sumstats IVW", theta1=slope, se1=slope_se,
+                             abs_diff_from_pooled=abs(slope - pooled), what_leaves_site="per-SNP beta_x, beta_y, SEs"))
+    rows.append(EstimatorRow(estimator="naive OLS (no instruments)", theta1=naive))
 
     if curved and shared:
         print("note: the quadratic comparison uses per-site first stages (quadratic_2sls); skipped for shared sets")
     if curved and not shared:
         theta, cov = quadratic_2sls(raw(sites))
-        rows.append(row("concatenated quadratic 2SLS", theta[0], np.sqrt(cov[0, 0]), theta2=theta[1],
-                        se2=np.sqrt(cov[1, 1]), leaves="individual rows"))
+        rows.append(EstimatorRow(estimator="concatenated quadratic 2SLS", theta1=theta[0], se1=np.sqrt(cov[0, 0]),
+                                 theta2=theta[1], se2=np.sqrt(cov[1, 1]), what_leaves_site="individual rows"))
         qrun = Protocol(basis="quadratic", robust=True).run(sites)
         q = qrun.result
         d = max(abs(q["X"] - theta[0]), abs(q["X2"] - theta[1]))
-        rows.append(row("FedMR quadratic", q["X"], q.se("X"), q.se("X", True), q["X2"], q.se("X2"), q.se("X2", True),
-                        diff=d, rounds=qrun.rounds,
-                        leaves="the same statistics with W = [X, X^2], Z = [xhat, xhat^2], centred within site"))
-        qcfrun = Protocol(basis="quadratic", robust=True, crossfit=crossfit).run(sites)
-        qcf = qcfrun.result
-        rows.append(row(f"FedMR-CF quadratic ({crossfit} folds)", qcf["X"], qcf.se("X"), qcf.se("X", True),
-                        qcf["X2"], qcf.se("X2"), qcf.se("X2", True), rounds=qcfrun.rounds))
+        rows.append(fedmr_row("FedMR quadratic", qrun, diff=d, theta2=True,
+                              leaves="the same statistics with W = [X, X^2], Z = [xhat, xhat^2], centred within site"))
+        rows.append(fedmr_row(f"FedMR-CF quadratic ({crossfit} folds)",
+                              Protocol(basis="quadratic", robust=True, crossfit=crossfit).run(sites), theta2=True))
         thetas, covs = zip(*[quadratic_2sls([r]) for r in raw(sites)])
         mt, mc = multivariate_meta(thetas, covs)
-        rows.append(row("site quadratic 2SLS meta-analysis", mt[0], np.sqrt(mc[0, 0]), theta2=mt[1],
-                        se2=np.sqrt(mc[1, 1]), diff=max(abs(mt[0] - theta[0]), abs(mt[1] - theta[1])),
-                        leaves="two coefficients and a 2x2 covariance per site"))
+        rows.append(EstimatorRow(estimator="site quadratic 2SLS meta-analysis", theta1=mt[0], se1=np.sqrt(mc[0, 0]),
+                                 theta2=mt[1], se2=np.sqrt(mc[1, 1]),
+                                 abs_diff_from_pooled=max(abs(mt[0] - theta[0]), abs(mt[1] - theta[1])),
+                                 what_leaves_site="two coefficients and a 2x2 covariance per site"))
 
     truth = {"theta1": manifest["theta1"], "theta2": manifest.get("theta2"),
              "avg_slope": float(np.sum([s["n"] * s["avg_slope"] for s in manifest["sites"]])
                               / np.sum([s["n"] for s in manifest["sites"]]))}
-    df = pl.DataFrame(rows)
+    df = pl.DataFrame([asdict(r) for r in rows])
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / f"fedmr.{shape}.csv"
     df.write_csv(out)
@@ -160,7 +178,7 @@ def analyse(shape, crossfit, out_dir):
     return df
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--shape", action="append", choices=SHAPES + ("linear_shared",),
                    help="repeatable; default quadratic")

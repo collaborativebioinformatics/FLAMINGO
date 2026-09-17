@@ -127,6 +127,9 @@ def main():
     else:
         datasets = args.dataset or ["linear"]
     lines = [ln for ln in (run_dataset(d, args) for d in datasets) if ln]
+    if not lines:
+        print("no continuous dataset was run; nothing to summarise")
+        return
     summary_path = os.path.join(HERE, "results", "fedmr", "summary.csv")
     os.makedirs(os.path.dirname(summary_path), exist_ok=True)
     new = pd.DataFrame(lines)

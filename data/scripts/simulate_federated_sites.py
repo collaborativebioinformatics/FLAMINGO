@@ -13,18 +13,8 @@ nuisance parameters differ, mimicking ten biobanks in different countries:
 theta1, theta2 (the causal curve) are fixed across all sites: the causal
 effect of X on Y is assumed to be biology, not geography.
 
-Heterogeneity knobs (all off by default, so the checked-in sets are unchanged):
-
-    --shared-snps       the same harmonized SNPs at every site: one MAF vector and one
-                        beta vector drawn from the base seed; per-site h2_x then follows
-                        from those effects instead of being drawn
-    --maf-shift SD      with --shared-snps, perturb each site's allele frequencies on the
-                        logit scale by N(0, SD): allele frequencies differ by ancestry
-    --theta-sd SD       site-specific causal effect theta1 + N(0, SD)
-    --pleiotropy-mean/--pleiotropy-sd
-                        direct SNP -> Y effects alpha_j ~ N(mean, sd) per allele
-                        (balanced: mean 0; directional: mean != 0); shared across sites
-                        when --shared-snps, drawn per site otherwise
+Between-site heterogeneity knobs (--shared-snps, --maf-shift, --theta-sd,
+--pleiotropy-*) are defined in heterogeneity.py and off by default.
 """
 
 import argparse
@@ -36,78 +26,25 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from simulate_basic import scaled_beta, simulate, simulate_nonlinear, simulate_survival  # noqa: E402
+from heterogeneity import Heterogeneity, add_heterogeneity_args  # noqa: E402
+from simulate_basic import simulate, simulate_nonlinear, simulate_survival  # noqa: E402
 
 
-def add_heterogeneity_args(p):
-    """CLI knobs shared by both federated generators."""
-    p.add_argument("--shared-snps", action="store_true", help="same SNPs (MAF, beta) at every site")
-    p.add_argument("--maf-shift", type=float, default=0.0, help="with --shared-snps: logit-scale SD of per-site MAF shifts")
-    p.add_argument("--theta-sd", type=float, default=0.0, help="SD of site-specific theta1 around --theta1")
-    p.add_argument("--pleiotropy-mean", type=float, default=0.0, help="mean direct SNP -> Y effect per allele")
-    p.add_argument("--pleiotropy-sd", type=float, default=0.0, help="SD of direct SNP -> Y effects")
-
-
-class Heterogeneity:
-    """Draws the shared SNP panel, site-specific causal effects and pleiotropy from `a`
-    (the parsed CLI namespace) and hands each site its `extra` simulator kwargs."""
-
-    def __init__(self, rng, a):
-        self.a = a
-        self.pleiotropic = a.pleiotropy_mean != 0 or a.pleiotropy_sd != 0
-        self.maf0 = self.beta0 = self.alpha0 = None
-        if a.shared_snps:
-            self.maf0 = rng.uniform(0.05, 0.5, a.n_snps)
-            self.beta0 = scaled_beta(rng, self.maf0, a.h2x_mean)
-            self.alpha0 = rng.normal(a.pleiotropy_mean, a.pleiotropy_sd, a.n_snps) if self.pleiotropic else None
-        self.theta1 = (a.theta1 + rng.normal(0.0, a.theta_sd, a.n_sites) if a.theta_sd > 0
-                       else np.full(a.n_sites, a.theta1))
-
-    def extra(self, site_seed):
-        """Simulator kwargs for one site: shared maf (shifted per site), shared beta, alpha."""
-        a = self.a
-        site_rng = np.random.default_rng(10_000 + site_seed)
-        if a.shared_snps:
-            return {"maf": shift_maf(site_rng, self.maf0, a.maf_shift), "beta": self.beta0, "alpha": self.alpha0}
-        if self.pleiotropic:
-            return {"alpha": site_rng.normal(a.pleiotropy_mean, a.pleiotropy_sd, a.n_snps)}
-        return {}
-
-    def manifest(self):
-        a = self.a
-        out = {"shared_snps": a.shared_snps, "maf_shift": a.maf_shift, "theta_sd": a.theta_sd,
-               "pleiotropy_mean": a.pleiotropy_mean, "pleiotropy_sd": a.pleiotropy_sd}
-        if a.shared_snps:
-            out.update({"shared_maf": self.maf0.tolist(), "shared_beta": self.beta0.tolist(),
-                        "effect_allele": "allele coded 1 in the dosage; the same allele at every site"})
-            if self.alpha0 is not None:
-                out["shared_alpha"] = self.alpha0.tolist()
-        return out
-
-
-def shift_maf(rng, maf, sd):
-    """Perturb allele frequencies on the logit scale, kept inside (0.02, 0.98)."""
-    if sd <= 0:
-        return maf
-    logit = np.log(maf / (1 - maf)) + rng.normal(0.0, sd, len(maf))
-    return np.clip(1 / (1 + np.exp(-logit)), 0.02, 0.98)
-
-
-def sample_population_sizes(rng, n_sites, pop_min, pop_max):
+def sample_population_sizes(rng, n_sites, pop_min, pop_max) -> np.ndarray:
     """One draw per equal-width bin spanning [pop_min, pop_max], so ten sites
     cover the whole range instead of clustering around the mean."""
     edges = np.linspace(pop_min, pop_max, n_sites + 1)
     return np.array([rng.integers(lo, hi + 1) for lo, hi in zip(edges[:-1], edges[1:])])
 
 
-def sample_beta(rng, n_sites, mean, kappa):
+def sample_beta(rng, n_sites, mean, kappa) -> np.ndarray:
     """Beta(mean * kappa, (1 - mean) * kappa): concentration `kappa` controls
     spread around `mean` while keeping draws in (0, 1)."""
     a, b = mean * kappa, (1 - mean) * kappa
     return rng.beta(a, b, size=n_sites)
 
 
-def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa):
+def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa) -> tuple:
     n = sample_population_sizes(rng, n_sites, pop_min, pop_max)
     h2_x = sample_beta(rng, n_sites, h2x_mean, h2x_kappa)
     gamma_x = sample_beta(rng, n_sites, gamma_mean, gamma_kappa)
@@ -118,7 +55,7 @@ def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamm
     return n, h2_x, gamma_x, gamma_y
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n-sites", type=int, default=10)
     p.add_argument("--n-snps", type=int, default=20)

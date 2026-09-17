@@ -152,4 +152,4 @@ n-weighted mean of the site causal effects, which is what a site-intercept
 2SLS targets when effects differ. Results: `results/fedmr_sweep_summary.csv`
 and `results/fedmr_sweep.png`; the sweep section below is filled from them.
 
-SWEEP_RESULTS_PLACEHOLDER
+*Sweep results pending: the 100-seed run of `scripts/fedmr_sweep.py` with the corrected estimand is in progress; this section is filled from `results/fedmr_sweep_summary.csv` when it finishes.*

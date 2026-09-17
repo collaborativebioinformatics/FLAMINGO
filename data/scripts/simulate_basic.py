@@ -17,7 +17,7 @@ import numpy as np
 import polars as pl
 
 
-def _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf=None, beta=None):
+def _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf=None, beta=None) -> tuple:
     """Draw SNPs, confounder U and exposure X. Shared by the linear and non-linear models.
 
     maf and beta default to fresh draws (site-specific variants). Pass both to
@@ -49,13 +49,13 @@ def _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf=None, beta=None):
     return G, maf, beta, U, X, h2_x
 
 
-def scaled_beta(rng, maf, h2_x):
+def scaled_beta(rng, maf, h2_x) -> np.ndarray:
     """Per-SNP effects explaining h2_x of Var(X) = 1 at allele frequencies maf (for shared SNPs)."""
     beta = rng.normal(0.0, 1.0, len(maf))
     return beta * np.sqrt(h2_x / np.sum(beta**2 * 2 * maf * (1 - maf)))
 
 
-def _pleiotropy(G, maf, alpha):
+def _pleiotropy(G, maf, alpha) -> np.ndarray | float:
     """Direct G -> Y effects (horizontal pleiotropy), centred so they do not shift E[Y]."""
     if alpha is None:
         return 0.0
@@ -67,7 +67,7 @@ def _frame(n, G, U, X, Y):
     return pl.DataFrame({"id": np.arange(n), **snp_cols, "U": U, "X": X, "Y": Y})
 
 
-def simulate(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed, maf=None, beta=None, alpha=None):
+def simulate(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed, maf=None, beta=None, alpha=None) -> tuple:
     """Linear model: Y = theta X + sum_j alpha_j G_j + gamma_y U + e_y (alpha = 0 unless given)."""
     rng = np.random.default_rng(seed)
     G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
@@ -97,7 +97,7 @@ def causal_curve(shape, x, theta1, theta2):
 
 
 def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed,
-                       maf=None, beta=None, alpha=None):
+                       maf=None, beta=None, alpha=None) -> tuple:
     """Non-linear model: Y = f(X) + gamma_y U + e_y, with f from causal_curve().
 
     Same SNPs, confounder and exposure as simulate(); only the X -> Y link differs.

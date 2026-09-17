@@ -137,15 +137,35 @@ NVFlare client and the analysis scripts run the same arithmetic.
 7. **Nonlinear generated-instrument protocol**: done for the quadratic
    basis, both protocols, tested against `quadratic_2sls` and a stacked
    reference.
-8. **Cross-fitting and sweeps** (`scripts/fedmr_sweep.py`): bias, RMSE and
-   coverage over seeds for pooled / FedMR / FedMR-CF / site meta / sumstats
-   along sites, instrument strength, SNP count, imbalance, MAF shift,
-   effect heterogeneity and pleiotropy. Under effect heterogeneity the
-   estimand is the n-weighted mean of site effects (what pooled 2SLS with
-   site intercepts targets), stated before bias is reported.
-9. **Docs and manuscript**: `data/docs/federated-exact-mr.md`, README
-   quick-start step, `writing/methods.md` and `results.md` sections; fix the
-   "no CI" statements in the two existing federated docs.
+8. **Cross-fitting and sweeps** (`scripts/fedmr_sweep.py`): implemented;
+   the 100-seed run is in progress and its numbers go into the docs when it
+   finishes (the sweep sections there are marked as pending until then).
+   Bias, RMSE and coverage for pooled / FedMR-CF / site meta / sumstats along
+   sites, instrument strength, SNP count, imbalance, MAF shift, effect
+   heterogeneity and pleiotropy. Under effect heterogeneity the estimand is
+   the pooled 2SLS limit, `theta* = (B'A^-1 sum_k B_k theta_k) / (B'A^-1 B)`,
+   a first-stage-weighted mean of the site effects computed per replicate
+   from the realised first-stage matrices; it is *not* the n-weighted mean
+   (an earlier draft of this plan said so and was wrong), and the
+   inverse-variance-weighted routes target a slightly different mean.
+9. **Docs and manuscript**: written (`data/docs/federated-exact-mr.md`,
+   README quick-start steps, both project READMEs, `writing/methods.md` and
+   `results.md`, the two existing federated docs); the sweep sections are
+   pending the run in item 8.
+
+## Review follow-ups (2026-09-18, second round)
+
+- First-stage F under the local-first-stage protocol is now the F of the
+  original SNP set: each site also releases the residual sums of squares of
+  its own first stage (additive across sites), and the single-column
+  generated-instrument F is kept separately as `generated_instrument_F`.
+- The NVFlare job no longer crashes when every requested dataset is skipped.
+- `_finish` returns a `Run`; `SiteStats.from_transport` uses keyword
+  construction; the controller serialises through `FedMRResult.to_dict`;
+  `_union` is a dict. Heterogeneity lives in `scripts/heterogeneity.py`;
+  the generalized orchestrator takes one simulator closure per site; the
+  driver's rows are a keyword-only dataclass; the oracle check is in the
+  loader; compiled caches are ignored and removed.
 
 ## Decisions
 

@@ -48,6 +48,8 @@ class Design:
     z_roles: list
     w_roles: list
     absorbed: int = 1
+    first_stage_local: dict = None   # {"rss_full", "rss_reduced", "n_instruments", "n_params"} when the
+                                     # site fitted its own first stage on the original SNPs
 
     def __post_init__(self):
         assert self.Z.shape[0] == self.W.shape[0] == len(self.Y)

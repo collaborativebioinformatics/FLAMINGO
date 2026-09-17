@@ -22,14 +22,18 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from simulate_federated_sites import Heterogeneity, add_heterogeneity_args, sample_site_params  # noqa: E402
+from heterogeneity import Heterogeneity, add_heterogeneity_args  # noqa: E402
+from simulate_federated_sites import sample_site_params  # noqa: E402
 from simulators import make_simulator  # noqa: E402
 
 
-def run_federated(sim_fn, n_sites, n_snps, pop_min, pop_max,
-                   h2x_mean, h2x_kappa, gamma_mean, gamma_kappa, seed, out_dir, het=None):
-    """het: a Heterogeneity (shared SNPs, site-specific theta1, pleiotropy) or None for the
-    default independent-SNP draw. Returns (manifest rows, heterogeneity metadata)."""
+def run_federated(sim_fns, n_sites, n_snps, pop_min, pop_max,
+                   h2x_mean, h2x_kappa, gamma_mean, gamma_kappa, seed, out_dir, het=None) -> list:
+    """sim_fns: one simulator closure per site (they differ only when theta1 is site-specific).
+    het: a Heterogeneity (shared SNPs, site-specific theta1, pleiotropy) or None for the
+    default independent-SNP draw. Returns the manifest rows."""
+    if len(sim_fns) != n_sites:
+        raise ValueError(f"need one simulator per site: got {len(sim_fns)} for {n_sites} sites")
     rng = np.random.default_rng(seed)
     n, h2_x, gamma_x, gamma_y = sample_site_params(
         rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa
@@ -40,9 +44,8 @@ def run_federated(sim_fn, n_sites, n_snps, pop_min, pop_max,
     for i in range(n_sites):
         site_seed = seed + i + 1
         extra = het.extra(site_seed) if het else {}
-        fn = sim_fn[i] if isinstance(sim_fn, (list, tuple)) else sim_fn   # one closure per site when theta1 varies
-        df, truth = fn(int(n[i]), n_snps, float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]), site_seed,
-                       **extra)
+        df, truth = sim_fns[i](int(n[i]), n_snps, float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]),
+                               site_seed, **extra)
         h2_x[i] = truth.get("h2_x", h2_x[i])          # realized value when SNPs are shared
         site_id = f"site{i + 1:02d}"
         df.write_csv(out_dir / f"{site_id}.csv")
@@ -71,7 +74,7 @@ def run_federated(sim_fn, n_sites, n_snps, pop_min, pop_max,
     return manifest
 
 
-def default_out_dir(outcome, shape, link):
+def default_out_dir(outcome, shape, link) -> Path:
     """Encode outcome type (and shape/link where they apply) in the directory name,
     so the provenance of a federated draw is clear from its path alone."""
     if outcome == "continuous":
@@ -83,7 +86,7 @@ def default_out_dir(outcome, shape, link):
     return Path(f"simulated_data/federated/{tag}")
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--outcome", choices=["continuous", "binary", "survival"], default="continuous")
     p.add_argument("--shape", choices=["linear", "quadratic", "threshold"], default="quadratic",
@@ -114,11 +117,10 @@ def main():
 
     out = a.out or default_out_dir(a.outcome, a.shape, a.link)
     het = Heterogeneity(np.random.default_rng(a.seed), a)
-    make = lambda t1: make_simulator(a.outcome, a.shape, float(t1), a.theta2, a.link, a.prevalence,
-                                     a.weibull_k, a.weibull_scale, a.censor_frac, a.followup)
-    # theta1 is closed over by the simulator, so a site-specific theta1 needs one closure per site
-    sim_fn = [make(t1) for t1 in het.theta1] if a.theta_sd > 0 else make(a.theta1)
-    manifest = run_federated(sim_fn, a.n_sites, a.n_snps, a.pop_min, a.pop_max,
+    # theta1 is closed over by the simulator, so there is one closure per site (identical unless --theta-sd)
+    sim_fns = [make_simulator(a.outcome, a.shape, float(t1), a.theta2, a.link, a.prevalence,
+                              a.weibull_k, a.weibull_scale, a.censor_frac, a.followup) for t1 in het.theta1]
+    manifest = run_federated(sim_fns, a.n_sites, a.n_snps, a.pop_min, a.pop_max,
                               a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa, a.seed, out, het)
 
     manifest_meta = {

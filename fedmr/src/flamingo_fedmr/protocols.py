@@ -55,7 +55,7 @@ import numpy as np
 from .data import SiteData
 from .estimator import FedMRResult, fit, robust_cov
 from .schema import Design, Role, centre_within
-from .statistics import aggregate, aggregate_robust, site_robust_stats, site_stats
+from .statistics import Stats, aggregate, aggregate_robust, site_robust_stats, site_stats
 
 
 # ----------------------------------------------------------------------------- local pieces
@@ -72,6 +72,16 @@ def local_first_stage(site: SiteData) -> np.ndarray:
     return Z1 @ np.linalg.lstsq(Z1, site.X, rcond=None)[0]
 
 
+def local_first_stage_diagnostics(site: SiteData) -> dict:
+    """Residual sums of squares of X ~ [1, G, C] and X ~ [1, C] at the site, so the coordinator
+    can report the F of the original SNP set (these sums are additive across sites)."""
+    full = np.column_stack([np.ones(site.n), _fs_matrix(site)])
+    red = np.column_stack([np.ones(site.n), site.C])
+    rss = lambda M: float(np.sum((site.X - M @ np.linalg.lstsq(M, site.X, rcond=None)[0]) ** 2))
+    return {"rss_full": rss(full), "rss_reduced": rss(red), "n_instruments": site.G.shape[1],
+            "n_params": full.shape[1]}
+
+
 def _cov_cols(site: SiteData):
     return [f"cov:{c}" for c in site.cov_names], [Role.EXOGENOUS] * len(site.cov_names)
 
@@ -86,20 +96,23 @@ def design_shared(site: SiteData) -> Design:
                   [Role.INSTRUMENT] * m + cr, [Role.ENDOGENOUS] + cr)
 
 
-def design_generated(site: SiteData, xhat: np.ndarray, basis="linear") -> Design:
+def design_generated(site: SiteData, xhat: np.ndarray, basis: str = "linear",
+                     first_stage_local: dict = None) -> Design:
     """Second stage on a generated instrument, common columns at every site.
     basis 'linear': Z = [xhat, C], W = [X, C]; 'quadratic': Z = [xhat, xhat^2, C],
-    W = [X, X^2, C]. Centred within site."""
+    W = [X, X^2, C]. Centred within site. first_stage_local carries the site's own
+    first-stage diagnostics when it fitted one (see local_first_stage_diagnostics)."""
     cn, cr = _cov_cols(site)
     if basis == "linear":
         xh, X, Y, C = centre_within(xhat, site.X, site.Y, site.C)
         return Design(site.name, np.column_stack([xh, C]), np.column_stack([X, C]), Y,
-                      ["xhat"] + cn, ["X"] + cn, [Role.INSTRUMENT] + cr, [Role.ENDOGENOUS] + cr)
+                      ["xhat"] + cn, ["X"] + cn, [Role.INSTRUMENT] + cr, [Role.ENDOGENOUS] + cr,
+                      first_stage_local=first_stage_local)
     if basis == "quadratic":
         xh, xh2, X, X2, Y, C = centre_within(xhat, xhat**2, site.X, site.X**2, site.Y, site.C)
         return Design(site.name, np.column_stack([xh, xh2, C]), np.column_stack([X, X2, C]), Y,
                       ["xhat", "xhat2"] + cn, ["X", "X2"] + cn,
-                      [Role.INSTRUMENT] * 2 + cr, [Role.ENDOGENOUS] * 2 + cr)
+                      [Role.INSTRUMENT] * 2 + cr, [Role.ENDOGENOUS] * 2 + cr, first_stage_local=first_stage_local)
     raise ValueError(basis)
 
 
@@ -184,52 +197,50 @@ def crossfit_xhat_local(site: SiteData, folds, k):
 class Run:
     """A completed protocol run: the designs (never leave the sites), the sums, and the result."""
     designs: list
-    stats: object
+    stats: Stats
     result: FedMRResult
     rounds: int
 
 
-def _finish(designs, robust):
+def _finish(designs: list[Design], robust: bool, extra_rounds: int = 0) -> Run:
+    """Round 1 (statistics) and, if asked, round 2 (robust covariance) over the given designs."""
     stats = aggregate([site_stats(d) for d in designs])
     res = fit(stats)
-    rounds = 1
+    rounds = 1 + extra_rounds
     if robust:
         tb = res.theta_by_name()
         H = aggregate_robust([(d.z_names, site_robust_stats(d, tb)) for d in designs], stats.layout)
         res.robust_cov = robust_cov(stats, H)
         rounds += 1
-    return designs, stats, res, rounds
+    return Run(designs, stats, res, rounds)
 
 
 class SharedInstrumentFedMR:
     """Harmonized SNPs at every site. basis 'linear' uses G directly (one round);
     'quadratic' or crossfit > 0 need a global first stage (two rounds)."""
 
-    def __init__(self, basis="linear", crossfit=0, robust=True, seed=0):
+    def __init__(self, basis: str = "linear", crossfit: int = 0, robust: bool = True, seed: int = 0):
         self.basis, self.crossfit, self.robust, self.seed = basis, crossfit, robust, seed
 
     def run(self, sites: list[SiteData]) -> Run:
-        extra = 0
         if self.crossfit:
             folds = [fold_ids(s.n, self.crossfit, self.seed + i) for i, s in enumerate(sites)]
             pis = crossfit_pi([crossfit_moments(s, f, self.crossfit) for s, f in zip(sites, folds)], self.crossfit)
-            designs = [design_generated(s, crossfit_xhat(s, f, pis), self.basis)
-                       for s, f in zip(sites, folds)]
-            extra = 1
-        elif self.basis == "quadratic":
+            designs = [design_generated(s, crossfit_xhat(s, f, pis), self.basis) for s, f in zip(sites, folds)]
+            return _finish(designs, self.robust, extra_rounds=1)
+        if self.basis == "quadratic":
             pi = first_stage_global([first_stage_moments(s) for s in sites])
             designs = [design_generated(s, predict_xhat(s, pi), "quadratic") for s in sites]
-            extra = 1
-        else:
-            designs = [design_shared(s) for s in sites]
-        d, st, res, rounds = _finish(designs, self.robust)
-        return Run(d, st, res, rounds + extra)
+            return _finish(designs, self.robust, extra_rounds=1)
+        return _finish([design_shared(s) for s in sites], self.robust)
 
 
 class LocalFirstStageFedMR:
-    """Site-specific SNPs: local first stage, generated instrument, one round (+ robust)."""
+    """Site-specific SNPs: local first stage, generated instrument, one round (+ robust).
+    Each site also releases the residual sums of squares of its first stage so the
+    coordinator reports the F of the SNP set, not of the single generated column."""
 
-    def __init__(self, basis="linear", crossfit=0, robust=True, seed=0):
+    def __init__(self, basis: str = "linear", crossfit: int = 0, robust: bool = True, seed: int = 0):
         self.basis, self.crossfit, self.robust, self.seed = basis, crossfit, robust, seed
 
     def run(self, sites: list[SiteData]) -> Run:
@@ -238,8 +249,9 @@ class LocalFirstStageFedMR:
                      for i, s in enumerate(sites)]
         else:
             xhats = [local_first_stage(s) for s in sites]
-        designs = [design_generated(s, xh, self.basis) for s, xh in zip(sites, xhats)]
-        return Run(*_finish(designs, self.robust))
+        designs = [design_generated(s, xh, self.basis, local_first_stage_diagnostics(s))
+                   for s, xh in zip(sites, xhats)]
+        return _finish(designs, self.robust)
 
 
 def protocol_for(manifest: dict, **kw):
@@ -247,7 +259,7 @@ def protocol_for(manifest: dict, **kw):
     return SharedInstrumentFedMR(**kw) if manifest.get("shared_snps") else LocalFirstStageFedMR(**kw)
 
 
-def fedmr(sites, instruments="site", **kw) -> FedMRResult:
+def fedmr(sites: list[SiteData], instruments: str = "site", **kw) -> FedMRResult:
     """One-call convenience: instruments 'site' (LocalFirstStage) or 'shared' (SharedInstrument)."""
     proto = SharedInstrumentFedMR(**kw) if instruments == "shared" else LocalFirstStageFedMR(**kw)
     return proto.run(sites).result
