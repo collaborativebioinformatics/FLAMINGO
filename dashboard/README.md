@@ -40,10 +40,14 @@ Its `local` engine reproduces FedAvg's arithmetic in-process in seconds and is
 the default; `nvflare` stands up the real simulated federation and costs about
 40 s per job.
 
-The **All estimators** table is the comparison: one row per estimator with what
+The results lead with the headline figure — the dose-response curve for the
+shapes that have a θ2 to recover, the forest plot otherwise — since that is the
+one plot carrying every estimator against the truth. Below it, the **All
+estimators** table is the numeric comparison: one row per estimator with what
 each one is allowed to see, from per-SNP summary statistics through model
 updates to pooled individual rows. The rows needing pooled rows are benchmarks a
-real federation could not run.
+real federation could not run. Every figure and table produced by the chain then
+follows under **All outputs**, each under its own heading with its download.
 
 **3 · Sensitivity & invariance** asks how much the answer depends on which
 sites, which instruments and which fit. It needs no run: it works from the
