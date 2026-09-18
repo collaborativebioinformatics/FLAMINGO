@@ -1,11 +1,11 @@
-"""The `fedmr` method of job.py: exact federated 2SLS from summed sufficient statistics.
+"""The `fed2sls` method of job.py: exact federated 2SLS from summed sufficient statistics.
 
 Nothing is trained. Each site releases the cross-products of its centred
 design (flamingo_fedmr.site_stats), the server sums them and solves; a
 second round returns the HC0 robust covariance. Both engines run the same
 arithmetic:
 
-    nvflare   src/fedmr_controller.py on the server, src/fedmr_client.py at every
+    nvflare   src/fed2sls_controller.py on the server, src/fed2sls_client.py at every
               site, in the simulator; the estimate is then checked against the
               in-process protocol on the same files (must agree to TOL)
     local     flamingo_fedmr's protocol classes in this process
@@ -14,7 +14,7 @@ For datasets whose sites hold their own SNPs (the repo's default) the
 estimate also equals the repo's pooled 2SLS with per-site first stages and
 site intercepts, and that difference is checked and recorded too.
 
-Outputs, under results/fedmr/<dataset>/:
+Outputs, under results/fed2sls/<dataset>/:
     estimates.<basis>[.cf<k>].json   the server's full result: theta, SE, robust SE, diagnostics
     curves.csv                       the fitted causal curve on the shared X grid with its
                                      analytic 95% band, in the layout plots.py reads
@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tasks import X_GRID  # noqa: E402
 
 TOL = 1e-10
-METHOD = "fedmr"
+METHOD = "fed2sls"
 CURVE_COLUMNS = ["site", "round", "x", "f", "f_lo", "f_hi"]
 
 
@@ -47,11 +47,13 @@ def protocol_name(manifest):
     return "shared" if manifest.get("shared_snps") else "local"
 
 
-def supported(manifest, basis, crossfit):
-    """Why this (dataset, basis, crossfit) cannot run, or None if it can. The NVFlare transport
-    (and so this method) runs the shared-instrument protocol with the linear basis only."""
-    if protocol_name(manifest) == "shared" and (basis != "linear" or crossfit):
-        return "the shared-instrument protocol runs with basis=linear and no cross-fit"
+def supported(manifest, basis, crossfit, engine="nvflare"):
+    """Why this (dataset, basis, crossfit, engine) cannot run, or None if it can. The NVFlare
+    transport runs the shared-instrument protocol with the linear basis only (its quadratic and
+    cross-fit variants need a global first stage that fed2sls_client.py does not implement);
+    the local engine runs every variant of both protocols."""
+    if engine == "nvflare" and protocol_name(manifest) == "shared" and (basis != "linear" or crossfit):
+        return "the NVFlare transport runs the shared-instrument protocol with basis=linear and no cross-fit"
     return None
 
 
@@ -91,17 +93,17 @@ def run_in_process(data, protocol, basis, crossfit, seed=0):
 
 def run_nvflare(data_dir, sites, protocol, basis, crossfit, seed, out_path, workspace, simulator_run,
                 task_interval):
-    """FedMRController on the server, fedmr_client.py at every site, through the simulator."""
+    """Fed2SLSController on the server, fed2sls_client.py at every site, through the simulator."""
     from nvflare.job_config.api import FedJob
     from nvflare.job_config.script_runner import FrameworkType, ScriptRunner
-    from fedmr_controller import FedMRController
+    from fed2sls_controller import Fed2SLSController
 
     here = os.path.dirname(os.path.abspath(__file__))
-    job = FedJob(name=f"fedmr_{os.path.basename(data_dir)}_{basis}", min_clients=len(sites))
-    job.to_server(FedMRController(protocol=protocol, basis=basis, crossfit=crossfit, robust=True, seed=seed,
+    job = FedJob(name=f"fed2sls_{os.path.basename(data_dir)}_{basis}", min_clients=len(sites))
+    job.to_server(Fed2SLSController(protocol=protocol, basis=basis, crossfit=crossfit, robust=True, seed=seed,
                                   out_path=out_path))
     # framework NUMPY: the default PyTorch converters expect tensors and drop plain numpy payloads
-    runner = ScriptRunner(script=os.path.join(here, "fedmr_client.py"),
+    runner = ScriptRunner(script=os.path.join(here, "fed2sls_client.py"),
                           script_args=f"--data_dir {data_dir} --sites {','.join(sites)}", framework=FrameworkType.NUMPY)
     for site in sites:
         job.to(runner, site)
@@ -178,7 +180,7 @@ def run(dataset, data_dir, results_dir, workspace, engine, basis, crossfit, seed
     pd.DataFrame([row]).to_csv(os.path.join(results_dir, "metrics.csv"), index=False)
 
     endog = [n for n in est["w_names"] if n in ("X", "X2")]
-    print(f"FedMR fit ({engine}, protocol={protocol}, basis={basis}"
+    print(f"Fed-2SLS fit ({engine}, protocol={protocol}, basis={basis}"
           + (f", crossfit={crossfit}" if crossfit else "") + f") over {len(sites)} sites, N = {est['N']}, "
           f"{est['rounds']} rounds:")
     for n in endog:
@@ -188,6 +190,6 @@ def run(dataset, data_dir, results_dir, workspace, engine, basis, crossfit, seed
     if diffs:
         print("  identity checks: " + "  ".join(f"{k} = {v:.2e}" for k, v in diffs.items()))
     if any(v >= TOL for v in diffs.values()):
-        raise SystemExit(f"FedMR identity check failed for {dataset}: {diffs}")
+        raise SystemExit(f"Fed-2SLS identity check failed for {dataset}: {diffs}")
     print(f"wrote {results_dir}", flush=True)
     return row

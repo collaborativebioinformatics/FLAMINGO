@@ -2,7 +2,7 @@
 allele-frequency shifts, site-specific causal effects and pleiotropy.
 
 Owned here so that simulate_federated_sites.py, simulate_federated.py and
-fedmr_sweep.py share one definition. Shared SNPs are the default; every
+fed2sls_sweep.py share one definition. Shared SNPs are the default; every
 other knob is off by default.
 
     --shared-snps       one MAF vector and one beta vector drawn from the base seed and

@@ -32,8 +32,11 @@ from lifelines import CoxPHFitter
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, FEDMR_COLOR, INK, MUTED, GRID = ("#2a78d6", "#eb6834", "#1baf7a", "#8a2be2",
-                                                                     "#1f1f1e", "#6b6a63", "#e6e5df")
+import mr_style as S  # noqa: E402  one look per estimator across every figure in the repo
+
+SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, FED2SLS_COLOR, POOLED_COLOR = (
+    S.SITE_BLUE, S.ORANGE, S.GREEN, S.VIOLET, S.BLUE)
+INK, MUTED, GRID = S.INK, S.MUTED, S.GRID
 FL_RESULTS = Path(__file__).resolve().parents[2] / "federated_learning" / "results"
 
 
@@ -105,14 +108,6 @@ def quadratic_2sls(sites) -> tuple[np.ndarray, np.ndarray]:
     return coef[:2], cov[:2, :2]
 
 
-def multivariate_meta(thetas, covs) -> tuple[np.ndarray, np.ndarray]:
-    """Inverse-variance meta-analysis of vector estimates with their covariances."""
-    W = [np.linalg.inv(c) for c in covs]
-    cov = np.linalg.inv(sum(W))
-    theta = cov @ sum(w @ t for w, t in zip(W, thetas))
-    return theta, cov
-
-
 def pooled_2sls(sites: list[tuple[np.ndarray, np.ndarray, np.ndarray]]) -> tuple[float, float, float]:
     """Concatenate all sites and fit one 2SLS with site-specific first stages and site intercepts."""
     xhat, X, Y, site_idx = _first_stage(sites)
@@ -154,64 +149,75 @@ def site_summary(csv: Path, sumstats_dir: Path, survival: bool, curved: bool = F
     row = {"site": site, "n": df.height, "avg_slope": truth["avg_slope"],
            "ivw": est, "ivw_se": se, "naive_ols": naive, "mean_F": f_stat}
     if curved:
-        # site-level model summary: the site fits the quadratic 2SLS on its own data and shares
-        # the two coefficients and their covariance, never individual rows
+        # the site's own quadratic 2SLS, shown per site for heterogeneity (not meta-analysed)
         th, cov = quadratic_2sls([site_summary.raw[-1]])
-        site_summary.models.append((th, cov))
         row.update({"q_theta1": float(th[0]), "q_theta1_se": float(np.sqrt(cov[0, 0])),
                     "q_theta2": float(th[1]), "q_theta2_se": float(np.sqrt(cov[1, 1]))})
     return row
 
 
 site_summary.raw = []
-site_summary.models = []
+
+
+FAMILIES = ("sumstats", "federated", "fed2sls", "pooled")   # canonical order of the combined rows
+
+
+def family_positions(rows) -> dict[str, float]:
+    """Y position of each selected family row, packed below the site rows in canonical order."""
+    return {k: -1 - 1.2 * i for i, k in enumerate(f for f in FAMILIES if f in rows)}
 
 
 def _family_rows(ax, y_sites, rows_y, res, n_all, families) -> None:
     """Y tick labels for site rows and the family-grouped combined rows."""
-    ticks = list(y_sites) + [rows_y[k] for k in families]
+    shown = [k for k in families if k in rows_y]
+    ticks = list(y_sites) + [rows_y[k] for k in shown]
     labels = [f"{s}  (n={n:,}, F={f:.0f})" for s, n, f in zip(res["site"], res["n"], res["mean_F"])]
-    labels += [f"{families[k]}  (n={n_all:,})" for k in families]
+    labels += [f"{families[k]}  (n={n_all:,})" for k in shown]
     ax.set_yticks(ticks)
     ax.set_yticklabels(labels, fontsize=9)
 
 
-def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, target_label, shape, out: Path,
-           fedmr=None) -> None:
+def forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, shape, out: Path,
+           fed2sls=None, rows=FAMILIES, fl_ci_=None) -> None:
+    """rows: which combined rows to draw (sumstats, federated, fed2sls, pooled); site rows always.
+    fl_ci_: fl_ci()'s bootstrap intervals for the Fed-2SRI row, when there are any."""
+    fl_ci_ = fl_ci_ or {}
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
-    rows_y = {"sumstats": -1, "federated": -2.2, "fedmr": -3.4, "pooled": -4.6}
-    fig, ax = plt.subplots(figsize=(8, 7.2), dpi=150)
+    rows_y = family_positions(rows)
+    fig, ax = plt.subplots(figsize=(8, 6.2 + 0.25 * len(rows_y)), dpi=150)
     ax.axvline(target, color=INK, linewidth=1.2, linestyle="--")
     ax.errorbar(res["ivw"], y, xerr=1.96 * res["ivw_se"], fmt="o", color=SITE_COLOR, ms=6,
                 ecolor=SITE_COLOR, elinewidth=2, capsize=0, label="site IVW (95% CI)")
-    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="naive fit (no instruments)", zorder=3)
-    ax.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
-                ecolor=SUMSTATS_COLOR, elinewidth=3, label="sumstats: meta-analysis of site IVW")
-    if "2sri" in fl:
-        ax.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
-                   label="federated: NVFlare 2SRI, global model (no CI)")
-    if "naive" in fl:
-        ax.scatter([fl["naive"][0]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
-    if fedmr is not None:
-        ax.errorbar([fedmr[0]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[1]], fmt="v", color=FEDMR_COLOR, ms=8,
-                    ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR, exact pooled 2SLS (95% CI)")
-    else:
-        ax.text(0.5, rows_y["fedmr"], "no FedMR run for this dataset", transform=ax.get_yaxis_transform(),
-                ha="center", va="center", fontsize=9, color=FEDMR_COLOR, style="italic")
-    pooled_label = "concatenated: one stratified 2SPS Cox" if shape == "cox" else "concatenated: one pooled 2SLS"
-    ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=INK, ms=7,
-                ecolor=INK, elinewidth=3, label=pooled_label)
-    ax.scatter([pooled_naive], [rows_y["pooled"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
-    ax.axhline(-0.4, color=GRID, linewidth=0.8)
-    if "2sri" not in fl:
-        ax.text(0.5, rows_y["federated"], "no NVFlare 2SRI run for this dataset", transform=ax.get_yaxis_transform(),
-                ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
+    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="site naive (no instruments)",
+               zorder=3)
+    if "sumstats" in rows_y:
+        ax.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
+                    ecolor=SUMSTATS_COLOR, elinewidth=3, label=f"{S.NAME['sumstats']} (95% CI)")
+    if "federated" in rows_y:
+        if "2sri" in fl:
+            _fl_marker(ax, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0, S.NAME["2sri"])
+        else:
+            ax.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax.get_yaxis_transform(),
+                    ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
+    if "fed2sls" in rows_y:
+        if fed2sls is not None:
+            ax.errorbar([fed2sls[0]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[1]], fmt="v", color=FED2SLS_COLOR,
+                        ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label=f"{S.NAME['fed2sls']} (95% CI)")
+        else:
+            ax.text(0.5, rows_y["fed2sls"], "no Fed-2SLS run for this dataset", transform=ax.get_yaxis_transform(),
+                    ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
+    if "pooled" in rows_y:
+        pooled_label = ("Concatenated 2SPS Cox (95% CI)" if shape == "cox" else f"{S.NAME['pooled']} (95% CI)")
+        ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=POOLED_COLOR, ms=7,
+                    ecolor=POOLED_COLOR, elinewidth=3, label=pooled_label)
+    if rows_y:
+        ax.axhline(-0.4, color=GRID, linewidth=0.8)
     _family_rows(ax, y, rows_y, res, res["n"].sum(),
-                 {"sumstats": "sumstats", "federated": "federated: FedAvg", "fedmr": "federated: FedMR",
-                  "pooled": "concatenated"})
+                 {"sumstats": S.NAME["sumstats"], "federated": S.NAME["2sri"], "fed2sls": S.NAME["fed2sls"],
+                  "pooled": S.NAME["pooled"]})
     ax.set_xlabel("estimated log hazard ratio per unit X" if shape == "cox" else "estimated causal effect of X on Y")
-    ax.set_title(f"{shape} model: sumstats vs federated vs concatenated\ndashed line: {target_label}",
+    ax.set_title(f"{shape} model: estimates by site and by model\ndashed line: {target_label}",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, fontsize=9)
     _style(ax)
@@ -219,16 +225,34 @@ def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, targ
     fig.savefig(out)
 
 
-def fedmr_row(dataset: str, curved: bool) -> tuple[float, float, float | None, float | None] | None:
-    """FedMR estimate from results/fedmr.<dataset>.csv (scripts/federated_exact_mr.py), or None.
-    Returns (theta1, se1, theta2, se2); theta2 and se2 are None for the linear layout."""
-    path = Path("results") / f"fedmr.{dataset}.csv"
+def fed2sls_row(dataset: str, curved: bool,
+              root: Path = FL_RESULTS) -> tuple[float, float, float | None, float | None] | None:
+    """Fed-2SLS estimate for the forest, or None. Returns (theta1, se1, theta2, se2); theta2 and
+    se2 are None for the linear basis.
+
+    First choice is the federation's own run, <root>/fed2sls/<dataset>/metrics.csv from
+    `federated_learning/job.py --method fed2sls`, which is what the dashboard produces for
+    every run. When root is the repo's federated_learning/results/ the checked-in analysis
+    results/fed2sls.<dataset>.csv (scripts/federated_exact_mr.py) is the fallback; any other
+    root belongs to a different dataset, so that file is not consulted."""
+    run = root / "fed2sls" / dataset / "metrics.csv"
+    from_run = None
+    if run.exists():
+        r = pl.read_csv(run).row(-1, named=True)
+        from_run = (r["theta_X"], r["se_X"], r.get("theta_X2"), r.get("se_X2"))
+        if not curved or from_run[2] is not None:
+            return from_run
+        # a linear-basis run on a curved shape: prefer the checked-in quadratic analysis below,
+        # otherwise report theta1 alone
+    if root != FL_RESULTS:
+        return from_run
+    path = Path("results") / f"fed2sls.{dataset}.csv"
     if not path.exists():
         return None
     df = pl.read_csv(path)
-    r = df.filter(pl.col("estimator") == "FedMR quadratic" if curved else pl.col("estimator").str.starts_with("FedMR ("))
+    r = df.filter(pl.col("estimator") == "Fed-2SLS quadratic" if curved else pl.col("estimator").str.starts_with("Fed-2SLS ("))
     if r.height == 0:
-        return None
+        return from_run
     r = r.row(0, named=True)
     return r["theta1"], r["se1"], r["theta2"], r["se2"]
 
@@ -246,9 +270,9 @@ def fl_curve(method: str, dataset: str, root: Path = FL_RESULTS) -> tuple[np.nda
 
 def fl_params(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RESULTS) -> dict[str, tuple[float, ...]]:
     """Summarise the federated curves into the forest's parameters by least squares on |x| <= x_max.
-    Returns {"2sri": (theta1, theta2) or (slope,), "naive": ...} for the runs that exist."""
+    Returns {"2sri": (theta1, theta2) or (slope,)} when that run exists."""
     out = {}
-    for method in ("2sri", "naive"):
+    for method in ("2sri",):
         c = fl_curve(method, dataset, root)
         if c is None:
             continue
@@ -258,6 +282,44 @@ def fl_params(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RE
         coef = np.linalg.lstsq(basis, f[keep] - np.interp(0.0, x, f), rcond=None)[0]
         out[method] = tuple(float(v) for v in coef)
     return out
+
+
+def fl_ci(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RESULTS) -> dict[str, dict]:
+    """Bootstrap intervals for the parameters fl_params reads off the federated curves.
+
+    Present only when job.py ran with --bootstrap, which leaves curves_bootstrap.csv
+    (one anchored final curve per replicate) next to curves.csv. Each replicate's
+    curve is projected on the same basis and range as the point estimate; the
+    interval is the percentile interval of those projections and `se` their
+    standard deviation. Returns {"2sri": {"lo", "hi", "se", "B", "level"}}."""
+    out = {}
+    for method in ("2sri",):
+        path = root / method / dataset / "curves_bootstrap.csv"
+        if not path.exists():
+            continue
+        info = root / method / dataset / "bootstrap.json"
+        level = json.loads(info.read_text()).get("level", 0.95) if info.exists() else 0.95
+        boot = pl.read_csv(path).filter(pl.col("x").abs() <= x_max + 1e-9).sort(["rep", "x"])
+        coefs = []
+        for _, rep in boot.group_by("rep"):
+            x, f = rep["x"].to_numpy(), rep["f"].to_numpy()
+            basis = np.column_stack([x, x**2]) if curved else x[:, None]
+            coefs.append(np.linalg.lstsq(basis, f, rcond=None)[0])
+        coefs = np.array(coefs)
+        a = (1 - level) / 2
+        out[method] = {"lo": np.quantile(coefs, a, axis=0), "hi": np.quantile(coefs, 1 - a, axis=0),
+                       "se": coefs.std(axis=0, ddof=1), "B": len(coefs), "level": level}
+    return out
+
+
+def _fl_marker(ax, value, y, ci, k, label):
+    """The Fed-2SRI point, with its bootstrap interval for parameter k when there is one."""
+    if ci is None:
+        ax.scatter([value], [y], marker="^", s=90, color=FED_COLOR, zorder=4, label=label and label + " (no CI)")
+        return
+    err = [[max(value - ci["lo"][k], 0.0)], [max(ci["hi"][k] - value, 0.0)]]
+    ax.errorbar([value], [y], xerr=err, fmt="^", color=FED_COLOR, ms=9, ecolor=FED_COLOR, elinewidth=3, zorder=4,
+                label=label and f"{label} (bootstrap {int(round(ci['level'] * 100))}% CI, B={ci['B']})")
 
 
 def _style(ax) -> None:
@@ -270,13 +332,16 @@ def _style(ax) -> None:
     ax.set_axisbelow(True)
 
 
-def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_cov, pooled_naive, fl,
-                  avg_slope_target, shape, theta1, theta2, out: Path, fedmr=None) -> None:
-    """Two columns, one per parameter of the quadratic basis. Rows: sites, then the three families."""
+def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
+                  avg_slope_target, shape, theta1, theta2, out: Path, fed2sls=None, rows=FAMILIES,
+                  fl_ci_=None) -> None:
+    """Two columns, one per parameter of the quadratic basis. Rows: sites, then the selected families.
+    fl_ci_: fl_ci()'s bootstrap intervals for the Fed-2SRI row, when there are any."""
+    fl_ci_ = fl_ci_ or {}
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
-    rows_y = {"sumstats": -1, "models": -1.9, "federated": -3.1, "fedmr": -4.3, "pooled": -5.5}
-    fig, axes = plt.subplots(1, 2, figsize=(11, 7.4), dpi=150, sharey=True,
+    rows_y = family_positions(rows)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 6.4 + 0.25 * len(rows_y)), dpi=150, sharey=True,
                              gridspec_kw={"width_ratios": [1.15, 1]})
     ax1, ax2 = axes
     n_all = res["n"].sum()
@@ -286,36 +351,38 @@ def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_co
     if abs(avg_slope_target - theta1) > 0.01:
         ax1.axvline(avg_slope_target, color=MUTED, linewidth=1.2, linestyle=":")
     ax1.errorbar(res["q_theta1"], y, xerr=1.96 * res["q_theta1_se"], fmt="o", color=SITE_COLOR, ms=6,
-                 ecolor=SITE_COLOR, elinewidth=2, label="site model: local quadratic 2SLS (95% CI)")
+                 ecolor=SITE_COLOR, elinewidth=2, label="site quadratic 2SLS (95% CI)")
     ax1.scatter(res["ivw"], y, marker="o", s=34, facecolor="white", edgecolor=SUMSTATS_COLOR, linewidths=1.6, zorder=4,
-                label="site per-SNP IVW (average slope)")
-    ax1.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, zorder=3, label="naive fit (no instruments)")
-    ax1.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
-                 ecolor=SUMSTATS_COLOR, elinewidth=3, label="per-SNP sumstats: meta of site IVW")
-    ax1.errorbar([model_meta[0]], [rows_y["models"]], xerr=[1.96 * np.sqrt(model_cov[0, 0])], fmt="D",
-                 mfc="white", color=SUMSTATS_COLOR, ms=8, ecolor=SUMSTATS_COLOR, elinewidth=3,
-                 label="model sumstats: meta of site (θ1, θ2)")
-    if "2sri" in fl:
-        ax1.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
-                    label="federated: NVFlare 2SRI, global model (no CI)")
-        ax2.scatter([fl["2sri"][1]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4)
-    else:
-        ax1.text(0.5, rows_y["federated"], "no NVFlare 2SRI run for this dataset", transform=ax1.get_yaxis_transform(),
-                 ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
-    if "naive" in fl:
-        ax1.scatter([fl["naive"][0]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
-        ax2.scatter([fl["naive"][1]], [rows_y["federated"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
-    if fedmr is not None:
-        ax1.errorbar([fedmr[0]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[1]], fmt="v", color=FEDMR_COLOR, ms=8,
-                     ecolor=FEDMR_COLOR, elinewidth=3, label="federated: FedMR, exact pooled 2SLS (95% CI)")
-        ax2.errorbar([fedmr[2]], [rows_y["fedmr"]], xerr=[1.96 * fedmr[3]], fmt="v", color=FEDMR_COLOR, ms=8,
-                     ecolor=FEDMR_COLOR, elinewidth=3)
-    else:
-        ax1.text(0.5, rows_y["fedmr"], "no FedMR run for this dataset", transform=ax1.get_yaxis_transform(),
-                 ha="center", va="center", fontsize=9, color=FEDMR_COLOR, style="italic")
-    ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s", color=INK,
-                 ms=7, ecolor=INK, elinewidth=3, label="concatenated: one quadratic 2SLS")
-    ax1.scatter([pooled_naive], [rows_y["pooled"]], marker="|", s=120, color=MUTED, linewidths=2, zorder=3)
+                label="site IVW (average slope)")
+    ax1.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, zorder=3, label="site naive (no instruments)")
+    if "sumstats" in rows_y:
+        ax1.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
+                     ecolor=SUMSTATS_COLOR, elinewidth=3, label=f"{S.NAME['sumstats']} (95% CI)")
+        ax2.text(0.5, rows_y["sumstats"], "not identifiable from per-SNP summary statistics",
+                 transform=ax2.get_yaxis_transform(), ha="center", va="center", fontsize=9, color=SUMSTATS_COLOR,
+                 style="italic")
+    if "federated" in rows_y:
+        if "2sri" in fl:
+            _fl_marker(ax1, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0, S.NAME["2sri"])
+            _fl_marker(ax2, fl["2sri"][1], rows_y["federated"], fl_ci_.get("2sri"), 1, None)
+        else:
+            ax1.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax1.get_yaxis_transform(),
+                     ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
+    if "fed2sls" in rows_y:
+        if fed2sls is not None:
+            ax1.errorbar([fed2sls[0]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[1]], fmt="v", color=FED2SLS_COLOR,
+                         ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label=f"{S.NAME['fed2sls']} (95% CI)")
+            if fed2sls[2] is not None:     # a linear-basis run has no theta2
+                ax2.errorbar([fed2sls[2]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[3]], fmt="v",
+                             color=FED2SLS_COLOR, ms=8, ecolor=FED2SLS_COLOR, elinewidth=3)
+        else:
+            ax1.text(0.5, rows_y["fed2sls"], "no Fed-2SLS run for this dataset", transform=ax1.get_yaxis_transform(),
+                     ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
+    if "pooled" in rows_y:
+        ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s",
+                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3, label=f"{S.NAME['pooled']} (95% CI)")
+        ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s",
+                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3)
     ax1.set_xlabel("θ1: slope at X = 0")
     slope_note = "" if abs(avg_slope_target - theta1) <= 0.01 else f";  dotted: average slope {avg_slope_target:.2f}"
     ax1.set_title(f"dashed: true θ1 = {theta1}{slope_note}", loc="left", fontsize=10, color=INK)
@@ -330,21 +397,15 @@ def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_co
                       loc="left", fontsize=10, color=INK)
     ax2.errorbar(res["q_theta2"], y, xerr=1.96 * res["q_theta2_se"], fmt="o", color=SITE_COLOR, ms=6,
                  ecolor=SITE_COLOR, elinewidth=2)
-    ax2.errorbar([model_meta[1]], [rows_y["models"]], xerr=[1.96 * np.sqrt(model_cov[1, 1])], fmt="D",
-                 mfc="white", color=SUMSTATS_COLOR, ms=8, ecolor=SUMSTATS_COLOR, elinewidth=3)
-    ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s", color=INK,
-                 ms=7, ecolor=INK, elinewidth=3)
-    ax2.text(0.5, rows_y["sumstats"], "not identifiable from per-SNP summary statistics", transform=ax2.get_yaxis_transform(),
-             ha="center", va="center", fontsize=9, color=SUMSTATS_COLOR, style="italic")
     ax2.set_xlabel("θ2: curvature")
 
     for ax in axes:
-        ax.axhline(-0.4, color=GRID, linewidth=0.8)
+        if rows_y:
+            ax.axhline(-0.4, color=GRID, linewidth=0.8)
         _style(ax)
-    _family_rows(ax1, y, rows_y, res, n_all, {"sumstats": "sumstats: per-SNP", "models": "sumstats: site models",
-                                              "federated": "federated: FedAvg", "fedmr": "federated: FedMR",
-                                              "pooled": "concatenated"})
-    fig.suptitle(f"{shape} model: sumstats vs federated vs concatenated, two parameters of the causal curve",
+    _family_rows(ax1, y, rows_y, res, n_all, {"sumstats": S.NAME["sumstats"], "federated": S.NAME["2sri"],
+                                              "fed2sls": S.NAME["fed2sls"], "pooled": S.NAME["pooled"]})
+    fig.suptitle(f"{shape} model: estimates by site and by model, two parameters of the causal curve",
                  x=0.01, ha="left", fontsize=11, color=INK)
     handles, labels = ax1.get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, loc="lower center", ncol=3, fontsize=9, bbox_to_anchor=(0.5, -0.01))
@@ -357,6 +418,9 @@ def main() -> None:
     p.add_argument("--shape", choices=["linear", "quadratic", "threshold", "cox"], default="linear")
     p.add_argument("--sites", type=Path, default=None, help="default simulated_data/federated/<shape>")
     p.add_argument("--out", type=Path, default=None, help="output stem; default results/sumstats.<shape>")
+    p.add_argument("--rows", nargs="+", choices=FAMILIES, default=list(FAMILIES),
+                   help="combined rows to draw on the forest: sumstats (per-SNP IVW meta), federated (Fed-2SRI), "
+                        "fed2sls (Fed-2SLS), pooled (concatenated); default all four. Everything is still computed")
     p.add_argument("--fl-results", type=Path, default=FL_RESULTS,
                    help="results/ root of the NVFlare runs, matching federated_nonlinear_mr.py --federated; "
                         "point it at an empty directory to plot the summary-statistics results alone")
@@ -367,7 +431,7 @@ def main() -> None:
     manifest = json.loads((a.sites / "manifest.json").read_text())
     sumstats_dir = a.sites / "sumstats"
     sumstats_dir.mkdir(exist_ok=True)
-    site_summary.raw, site_summary.models = [], []
+    site_summary.raw = []
     curved = a.shape in ("quadratic", "threshold")
     rows = [site_summary(csv, sumstats_dir, a.shape == "cox", curved) for csv in sorted(a.sites.glob("site*.csv"))]
     res = pl.DataFrame(rows)
@@ -385,40 +449,47 @@ def main() -> None:
     q = float(np.sum(w * (res["ivw"].to_numpy() - meta) ** 2))
 
     pooled_fn = pooled_2sps_cox if a.shape == "cox" else pooled_2sls
-    pooled, pooled_se, pooled_naive = pooled_fn(site_summary.raw)
+    pooled, pooled_se, _ = pooled_fn(site_summary.raw)
 
     a.out.parent.mkdir(parents=True, exist_ok=True)
     csv_out, png_out = Path(f"{a.out}.csv"), Path(f"{a.out}.png")
     res.write_csv(csv_out)
     fl = fl_params(a.sites.name, curved, root=a.fl_results)
-    fedmr = fedmr_row(a.sites.name, curved)
-    if fedmr is None:
-        print(
-            f"no FedMR result at results/fedmr.{a.sites.name}.csv; run scripts/federated_exact_mr.py --shape {a.shape}")
+    fed2sls = fed2sls_row(a.sites.name, curved, a.fl_results)
+    if fed2sls is None:
+        print(f"no Fed-2SLS run at {a.fl_results / 'fed2sls' / a.sites.name}; run federated_learning/job.py "
+              f"--method fed2sls (or scripts/federated_exact_mr.py --shape {a.shape} for the checked-in sets)")
     else:
-        print(f"federated FedMR: " + "  ".join(f"{v:.3f}" for v in fedmr if v is not None) + "   (exact, with CI)")
+        print(f"federated Fed-2SLS: " + "  ".join(f"{v:.3f}" for v in fed2sls if v is not None) + "   (exact, with CI)")
+    ci = fl_ci(a.sites.name, curved, root=a.fl_results)
     for method, coef in fl.items():
-        print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + "   (from curve, no CI)")
+        c = ci.get(method)
+        if c is None:
+            note = "from curve, no CI"
+        else:
+            # "se <values>;" is read by dashboard/runner.parse_federated_se
+            note = (f"from curve, bootstrap B={c['B']}: se " + "  ".join(f"{v:.3f}" for v in c["se"])
+                    + f"; {int(round(c['level'] * 100))}% CI "
+                    + "  ".join(f"[{lo:.3f}, {hi:.3f}]" for lo, hi in zip(c["lo"], c["hi"])))
+        print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + f"   ({note})")
     if "2sri" not in fl:
         print(f"no NVFlare 2SRI run at {a.fl_results / '2sri' / a.sites.name}")
     if curved:
-        model_meta, model_cov = multivariate_meta(*zip(*site_summary.models))
         pooled_q, pooled_cov = quadratic_2sls(site_summary.raw)
-        forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_cov, pooled_naive, fl,
-                      target, a.shape, manifest["theta1"], manifest["theta2"], png_out, fedmr)
-        mse = np.sqrt(np.diag(model_cov)); pse = np.sqrt(np.diag(pooled_cov))
-        print(f"model sumstats (meta of site quadratic fits): theta1 {model_meta[0]:.3f} ({mse[0]:.3f})  "
-              f"theta2 {model_meta[1]:.3f} ({mse[1]:.3f})")
+        forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
+                      target, a.shape, manifest["theta1"], manifest["theta2"], png_out, fed2sls, rows=a.rows,
+                      fl_ci_=ci)
+        pse = np.sqrt(np.diag(pooled_cov))
         print(f"concatenated quadratic 2SLS:                  theta1 {pooled_q[0]:.3f} ({pse[0]:.3f})  "
               f"theta2 {pooled_q[1]:.3f} ({pse[1]:.3f})")
     else:
-        forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, target_label, a.shape, png_out, fedmr)
+        forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, a.shape, png_out, fed2sls, rows=a.rows,
+               fl_ci_=ci)
 
     with pl.Config(tbl_rows=-1, float_precision=3):
         print(res)
     print(f"\nmeta IVW  {meta:.3f}  se {meta_se:.3f}  95% CI [{meta - 1.96 * meta_se:.3f}, {meta + 1.96 * meta_se:.3f}]")
-    print(f"pooled {'2SPS Cox' if a.shape == 'cox' else '2SLS'} {pooled:.3f}  se {pooled_se:.3f}  95% CI [{pooled - 1.96 * pooled_se:.3f}, {pooled + 1.96 * pooled_se:.3f}]"
-          f"   (pooled naive {pooled_naive:.3f})")
+    print(f"pooled {'2SPS Cox' if a.shape == 'cox' else '2SLS'} {pooled:.3f}  se {pooled_se:.3f}  95% CI [{pooled - 1.96 * pooled_se:.3f}, {pooled + 1.96 * pooled_se:.3f}]")
     print(f"target ({target_label})   heterogeneity Q {q:.1f} on {len(rows) - 1} df")
     print(f"wrote {sumstats_dir}/*.sumstats.csv, {csv_out}, {png_out}")
 

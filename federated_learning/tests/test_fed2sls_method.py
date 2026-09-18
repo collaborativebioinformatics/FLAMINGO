@@ -1,9 +1,9 @@
-"""Checks for the `fedmr` method's engine (src/fedmr_engine.py): the local engine equals the
+"""Checks for the `fed2sls` method's engine (src/fed2sls_engine.py): the local engine equals the
 package run in-process and the pooled fit, and the files it writes have the layout plots.py
-and job.py read. The NVFlare transport itself is exercised by `job.py --method fedmr`, which
+and job.py read. The NVFlare transport itself is exercised by `job.py --method fed2sls`, which
 asserts the same identities after every simulator run.
 
-    uv run --with pytest pytest tests/test_fedmr_method.py
+    uv run --with pytest pytest tests/test_fed2sls_method.py
 """
 
 import json
@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "src"))
 
 import flamingo_fedmr as fm  # noqa: E402
-import fedmr_engine as E  # noqa: E402
+import fed2sls_engine as E  # noqa: E402
 from tasks import X_GRID  # noqa: E402
 
 FED_DIR = os.path.join(os.path.dirname(os.path.dirname(HERE)), "data", "simulated_data", "federated")
@@ -84,11 +84,13 @@ def test_quadratic_basis_curve_uses_both_coefficients():
     assert np.allclose(c.f_hi - c.f, 1.96 * np.sqrt((x * 0.01) ** 2 + (x**2 * 0.02) ** 2))
 
 
-def test_shared_protocol_is_linear_only_and_others_are_open():
+def test_shared_protocol_is_linear_only_through_nvflare_and_open_locally():
     shared = {"shared_snps": True}
     assert E.supported(shared, "linear", 0) is None
     assert E.supported(shared, "quadratic", 0)
     assert E.supported(shared, "linear", 5)
+    assert E.supported(shared, "quadratic", 0, engine="local") is None
+    assert E.supported(shared, "linear", 5, engine="local") is None
     assert E.supported({}, "quadratic", 5) is None
     assert E.protocol_name(shared) == "shared" and E.protocol_name({}) == "local"
 

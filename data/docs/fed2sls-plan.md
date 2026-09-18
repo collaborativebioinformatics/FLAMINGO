@@ -1,4 +1,4 @@
-# Plan: FedMR, exact federated one-sample MR from sufficient statistics
+# Plan: Fed-2SLS, exact federated one-sample MR from sufficient statistics
 
 Source idea: a ChatGPT design note (shared 2026-09-17) proposing that pooled
 one-sample 2SLS MR can be computed *exactly* from additive cross-product
@@ -28,7 +28,7 @@ estimator, not an approximation of it.
 
 On every checked-in continuous set, both protocols below reproduce the
 repo's pooled fits (`pooled_2sls`, `quadratic_2sls`) to better than 1e-15
-in the estimate and the SE; `data/tests/test_fedmr.py` holds the checks
+in the estimate and the SE; `data/tests/test_fed2sls.py` holds the checks
 against independent stacked-data projections (full coefficient vector,
 classical and HC0 covariance, residual variance, first-stage diagnostics).
 
@@ -82,7 +82,7 @@ shared-instrument protocol releases the site's centred `G'G`, `G'X`, `G'Y`
 (a within-site LD matrix and GWAS-level sums). A threat model, key exchange,
 collusion threshold and dropout handling would all be needed before any
 masking scheme could be called privacy-preserving. None of that is claimed
-here; the plots and docs say "federated: FedMR", not "private".
+here; the plots and docs say "federated: Fed-2SLS", not "private".
 
 ## Numerical API
 
@@ -112,7 +112,7 @@ NVFlare client and the analysis scripts run the same arithmetic.
 1. **Linear statistical core** (`fedmr/`): done. Schema with roles, site
    statistics, aggregation, classical and HC0 covariance, rank and
    conditioning checks, transport helpers.
-2. **Independent equivalence tests** (`data/tests/test_fedmr.py`): done.
+2. **Independent equivalence tests** (`data/tests/test_fed2sls.py`): done.
    Stacked-data references, full vector and covariance equality, residual
    variance, nested-regression F, row-partition invariance across transport
    clients for one logical site, site-order invariance, transport
@@ -120,25 +120,25 @@ NVFlare client and the analysis scripts run the same arithmetic.
 3. **Local-first-stage adapter**: done, equals `pooled_2sls` and
    `quadratic_2sls`.
 4. **Driver and outputs** (`scripts/federated_exact_mr.py`): done. Four-way
-   comparison per set, `results/fedmr.<shape>.csv`; the forest plots keep
-   the NVFlare 2SRI row (`federated: FedAvg`, flexible curve, no analytic CI)
-   and add `federated: FedMR` (specified basis, analytic CI); the
-   dose-response plot draws the FedMR quadratic curve over the concatenated
+   comparison per set, `results/fed2sls.<shape>.csv`; the forest plots keep
+   the NVFlare 2SRI row (`federated: Fed-2SRI`, flexible curve, no analytic CI)
+   and add `federated: Fed-2SLS` (specified basis, analytic CI); the
+   dose-response plot draws the Fed-2SLS quadratic curve over the concatenated
    one.
 5. **Shared-SNP simulator**: done in `simulate_basic._draw_exposure`
    (given `maf`, `beta`, realized `h2_x`), both federated generators
    (`--shared-snps`, `--maf-shift`, `--theta-sd`, `--pleiotropy-mean/sd`),
    manifest records `shared_snps`, shared MAF/beta, effect-allele note and
    per-site realized `h2_x`; `federated/linear_shared` checked in.
-6. **NVFlare transport** (`--method fedmr` of `federated_learning/job.py`,
-   `src/fedmr_engine.py`; formerly a separate `fedmr_job.py`): transport the
+6. **NVFlare transport** (`--method fed2sls` of `federated_learning/job.py`,
+   `src/fed2sls_engine.py`; formerly a separate `fed2sls_job.py`): transport the
    tested statistics through a one-round (plus robust round) controller
    that sums, and assert equality with the in-process run. No secure
    aggregation claims.
 7. **Nonlinear generated-instrument protocol**: done for the quadratic
    basis, both protocols, tested against `quadratic_2sls` and a stacked
    reference.
-8. **Cross-fitting and sweeps** (`scripts/fedmr_sweep.py`): done, 100
+8. **Cross-fitting and sweeps** (`scripts/fed2sls_sweep.py`): done, 100
    seeds per level; results in `federated-exact-mr.md`. Under effect
    heterogeneity the estimand is the pooled 2SLS limit,
    `theta* = (B'A^-1 sum_k B_k theta_k) / (B'A^-1 B)`, a first-stage-weighted

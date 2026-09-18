@@ -16,6 +16,7 @@ results/fitted_curves_all.png, results/summary.csv
 
 import os
 import sys
+import textwrap
 
 import matplotlib
 matplotlib.use("Agg")
@@ -24,15 +25,17 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                                "data", "scripts"))
 from tasks import detect_task, load_manifest, true_curve  # noqa: E402
+import mr_style as S  # noqa: E402  one look per estimator across every figure in the repo
 
-BLUE, ORANGE, GRAY, INK, MUTED, SURFACE, GRID = (
-    "#256abf", "#eb6834", "#b8b8b5", "#1f1f1e", "#6b6b68", "#fcfcfb", "#e6e6e3")
-METHOD_STYLE = {                     # fixed colour per method, never cycled
-    "naive": dict(color=BLUE, label="federated naive: f(X)"),
-    "2sri": dict(color="#4a3aa7", label="federated MR 2SRI: f(X) with control function"),
-    "2sps": dict(color="#1baf7a", label="federated MR 2SPS: f(X_hat)"),
-    "fedmr": dict(color="#8a2be2", label="federated MR FedMR: exact 2SLS, 95% band"),
+BLUE, GRAY, INK, MUTED, SURFACE, GRID = S.BLUE, S.DATA_GREY, S.INK, S.MUTED, S.SURFACE, S.GRID
+METHOD_STYLE = {                     # colour and line style per method, shared with the MR scripts
+    "naive": dict(**S.NAIVE, label=f"{S.NAME['naive']} (federated, no instruments)"),
+    "2sri": dict(**S.FED2SRI, label=S.NAME["2sri"]),
+    "2sps": dict(**S.FED2SPS, label=S.NAME["2sps"]),
+    "fed2sls": dict(**S.FED2SLS, label=f"{S.NAME['fed2sls']} (95% band)"),
 }
 METHODS = list(METHOD_STYLE)
 
@@ -56,7 +59,8 @@ def last_curve(curves):
 
 def last_band(curves):
     """(x, f_lo, f_hi) of the last round, anchored like last_curve, or None when the run
-    carries no analytic band (the FedAvg methods)."""
+    carries no band: Fed-2SLS has an analytic one, the FedAvg methods one only after
+    job.py --bootstrap (src/bootstrap.py)."""
     if not {"f_lo", "f_hi"} <= set(curves.columns):
         return None
     last = curves["round"].max()
@@ -130,7 +134,7 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
         ylab = "mean Y" if task.name == "continuous" else "logit of P(Y = 1)"
         y0 = np.interp(0.0, emp.x, y)
         ax.scatter(emp.x, y - y0, s=18, color=GRAY, zorder=2,
-                   label=f"pooled data: binned {ylab}, relative to X = 0")
+                   label=f"pooled data: binned {ylab}")
     x_ref = None
     for method in METHODS:
         if method not in method_runs:
@@ -140,24 +144,27 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
         x_ref = x
         st = METHOD_STYLE[method]
         if method == "2sps" and "xhat_sd" in metrics.columns:
-            # f(X_hat) is only identified where X_hat has support: solid within 2 sd, faint beyond
+            # f(X_hat) is only identified where X_hat has support: full line within 2 sd, faint beyond
             lim = 2 * metrics.xhat_sd.max()
             inside = np.abs(x) <= lim
-            ax.plot(x[inside], f[inside], color=st["color"], lw=2.4, zorder=4,
-                    label=f'{st["label"]}, round {last} (solid: |X| <= 2 sd of X_hat = {lim:.1f})')
+            ax.plot(x[inside], f[inside], **S.line(st), zorder=4,
+                    label=f'{st["label"]}, round {last} (|X| <= 2 sd of X_hat = {lim:.1f})')
             ax.plot(x, f, color=st["color"], lw=1.0, ls=":", zorder=3)
             continue
-        if method == "fedmr":
+        if method == "fed2sls":
             band = last_band(curves)
             if band is not None:
-                ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=0.15, lw=0, zorder=2)
-            ax.plot(x, f, color=st["color"], lw=2.0, ls=(0, (4, 2)), zorder=4, label=st["label"])
+                ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=st["band_alpha"], lw=0, zorder=2)
+            ax.plot(x, f, **S.line(st), zorder=4, label=st["label"])
             continue
-        ax.plot(x, f, color=st["color"], lw=2.4, zorder=4, label=f'{st["label"]}, round {last}')
+        band = last_band(curves)          # present when job.py ran --bootstrap
+        if band is not None:
+            ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=0.15, lw=0, zorder=2)
+        ax.plot(x, f, **S.line(st), zorder=4,
+                label=f'{st["label"]}, round {last}' + (", bootstrap band" if band is not None else ""))
     tc = true_curve(manifest, x_ref)
     if tc is not None:
-        ax.plot(x_ref, tc - np.interp(0.0, x_ref, tc), color=ORANGE, lw=2, ls="--", zorder=3,
-                label="true causal curve f(X)")
+        ax.plot(x_ref, tc - np.interp(0.0, x_ref, tc), **S.line(S.TRUTH), zorder=3, label=S.NAME["truth"])
     ax.set_title(title, loc="left", fontsize=10, color=INK)
     ax.set_xlabel("X (exposure)", fontsize=9, color=MUTED)
     ax.set_ylabel(task.curve_label + ", relative to X = 0", fontsize=9, color=MUTED)
@@ -165,6 +172,16 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
 
 NOTE = ("naive fits E[outcome | X], which carries the confounder U's path; the MR methods use the SNPs "
         "as instruments so f(X) targets the causal curve.")
+METHOD_TITLE = {"naive": "federated naive", "2sri": "Fed-2SRI", "2sps": "Fed-2SPS", "fed2sls": "Fed-2SLS"}
+METHOD_NOTE = {           # one line under the title of the per-method plot
+    "naive": "outcome ~ f(X) with no instruments: E[outcome | X], which carries the confounder U's path.",
+    "2sri": "site-local first stage X ~ SNPs, then a federated network f(X) + c (X - X_hat) trained with FedAvg; "
+            "f is the causal curve and the control-function term absorbs the confounder.",
+    "2sps": "site-local first stage X ~ SNPs, then a federated network f(X_hat) trained with FedAvg; "
+            "solid where X_hat has support.",
+    "fed2sls": "exact pooled 2SLS from summed sufficient statistics: no training, two rounds; "
+               "the band is the analytic 95% interval.",
+}
 
 
 def _load(results_root, method, dataset):
@@ -180,20 +197,17 @@ def plot_dataset(dataset, method, results_root, data_dir, task=None):
         task = detect_task(pd.read_csv(os.path.join(data_dir, "site01.csv"), nrows=2000), manifest)
     results_dir = os.path.join(results_root, method, dataset)
     metrics, curves = _load(results_root, method, dataset)
-    if method != "fedmr":       # fedmr has no per-round test metrics: it is one closed-form solve
+    if method != "fed2sls":       # fed2sls has no per-round test metrics: it is one closed-form solve
         for stage in ("global", "local"):
             plot_metrics(metrics, task, stage, os.path.join(results_dir, f"metrics_by_round.{stage}.png"),
                          dataset, method)
 
-    method_runs = {method: (metrics, curves)}
-    if method != "naive" and _load(results_root, "naive", dataset):
-        method_runs["naive"] = _load(results_root, "naive", dataset)
     fig, ax = plt.subplots(figsize=(7.5, 4.8), facecolor=SURFACE)
-    draw_curves(ax, method_runs, task, manifest, data_dir, "")
+    draw_curves(ax, {method: (metrics, curves)}, task, manifest, data_dir, "")
     ax.legend(frameon=False, fontsize=8, loc="upper left")
-    fig.suptitle(f"{dataset}: fitted X -> outcome curve ({method})", x=0.01, ha="left", fontsize=12,
-                 color=INK, fontweight="bold")
-    fig.text(0.01, 0.9, NOTE, fontsize=8, color=MUTED, wrap=True)
+    fig.suptitle(f"{dataset}: fitted X -> outcome curve, {METHOD_TITLE.get(method, method)}", x=0.01, ha="left",
+                 fontsize=12, color=INK, fontweight="bold")
+    fig.text(0.01, 0.9, METHOD_NOTE.get(method, ""), fontsize=8, color=MUTED, wrap=True)
     fig.tight_layout(rect=(0, 0, 1, 0.88))
     fig.savefig(os.path.join(results_dir, "fitted_curve.png"), dpi=150, facecolor=SURFACE)
     plt.close(fig)
@@ -203,9 +217,10 @@ def plot_dataset(dataset, method, results_root, data_dir, task=None):
 def plot_overview(datasets, results_root, fed_dir, out):
     """One panel per dataset with every method's causal-curve head, plus summary.csv of
     last-round weighted test metrics per method and dataset."""
-    ncol = 3
+    ncol = max(1, min(3, len(datasets)))
     nrow = int(np.ceil(len(datasets) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(4.6 * ncol, 3.8 * nrow + 0.9), facecolor=SURFACE, squeeze=False)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(4.6 * ncol + 1.5, 3.8 * nrow + 1.6), facecolor=SURFACE,
+                             squeeze=False)
     for ax in axes.flat[len(datasets):]:
         ax.axis("off")
     rows = []
@@ -220,7 +235,7 @@ def plot_overview(datasets, results_root, fed_dir, out):
                 continue
             metrics, curves = loaded
             method_runs[method] = loaded
-            if method == "fedmr":
+            if method == "fed2sls":
                 r = metrics.iloc[-1]
                 rows.append({"dataset": ds, "method": method, "task": task.name, "round": int(r["round"]),
                              **{k: r[k] for k in ("theta_X", "se_X", "robust_se_X", "first_stage_F") if k in r}})
@@ -236,12 +251,17 @@ def plot_overview(datasets, results_root, fed_dir, out):
     for ax in axes.flat:
         for h, l in zip(*ax.get_legend_handles_labels()):
             handles.setdefault(l.split(", round")[0].split(" (solid")[0], h)
-    fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="upper right", ncol=2,
-               bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("Federated X -> outcome curve: naive vs MR (FedAvg and FedMR)", x=0.01, ha="left",
-                 fontsize=12, color=INK, fontweight="bold")
-    fig.text(0.01, 0.925, NOTE, fontsize=8, color=MUTED)
-    fig.tight_layout(rect=(0, 0, 1, 0.905))
+    legend_cols = 1 if ncol == 1 else 2
+    legend_rows = int(np.ceil(len(handles) / legend_cols))
+    fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="lower center", ncol=legend_cols,
+               bbox_to_anchor=(0.5, 0.0))
+    fig.suptitle("Federated X -> outcome curves" if ncol == 1 else
+                 "Federated X -> outcome curve: naive vs MR (Fed-2SRI, Fed-2SPS, Fed-2SLS)",
+                 x=0.01, ha="left", fontsize=12, color=INK, fontweight="bold")
+    fig.text(0.01, 0.945 if nrow > 1 else 0.92, textwrap.fill(NOTE, width=int(17 * (4.6 * ncol + 1.5))),
+             fontsize=8, color=MUTED, va="top")
+    bottom = (0.25 + 0.16 * legend_rows) / (3.8 * nrow + 1.6)     # inches of legend as a figure fraction
+    fig.tight_layout(rect=(0, bottom, 1, 0.93 if nrow > 1 else 0.9))
     fig.savefig(out, dpi=150, facecolor=SURFACE)
     plt.close(fig)
     summary = pd.DataFrame(rows)

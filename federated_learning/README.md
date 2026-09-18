@@ -14,7 +14,7 @@ the SNPs as instruments.
 | `naive` | `outcome ~ f(X)` | `E[outcome | X]`: the association, confounded by `U` |
 | `2sri` (default) | `outcome ~ f(X) + c (X - X_hat)` | the causal curve; the first-stage residual is a control function that carries the confounder |
 | `2sps` | `outcome ~ f(X_hat)` | the causal curve over the range of `X_hat` (predictor substitution) |
-| `fedmr` | exact 2SLS from summed sufficient statistics, no training (see below) | the slope `theta` of `Y ~ theta X` (or `[X, X^2]`), with analytic SEs; continuous outcomes only |
+| `fed2sls` | exact 2SLS from summed sufficient statistics, no training (see below) | the slope `theta` of `Y ~ theta X` (or `[X, X^2]`), with analytic SEs; continuous outcomes only |
 
 `X_hat` comes from a **site-local** first stage, ordinary least squares of X on
 the 20 SNPs on the site's training split. It has to be local: every simulated
@@ -47,16 +47,17 @@ approximations on the logit and log-hazard scales.
 
 | File | What |
 |---|---|
-| `job.py` | Builds the `FedAvgJob` (or the FedMR job for `--method fedmr`), attaches the client script to every site, runs the chosen engine, prints per-round tables, writes results and plots |
+| `job.py` | Builds the `FedAvgJob` (or the Fed-2SLS job for `--method fed2sls`), attaches the client script to every site, runs the chosen engine, prints per-round tables, writes results and plots |
 | `src/model.py` | `MLP` (naive) and `MRModel` (2sri / 2sps second stage). Output is predicted Y, a logit, or a log relative hazard |
 | `src/tasks.py` | The three outcome families: targets, loss (Cox partial likelihood with Breslow ties), metrics, and the true causal curve from the manifest |
 | `src/fedsite.py` | One site: 80/20 split, local first stage, local training, evaluation, fitted-curve recording. Shared by both engines |
 | `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
 | `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
+| `src/bootstrap.py` | `--bootstrap B`: resample-refit-retrain replicates and the pointwise percentile band for the FedAvg curves (see "Confidence bands" below) |
 | `src/plots.py` | Per-run metric and fitted-curve plots plus the all-datasets overview |
-| `src/fedmr_engine.py`, `src/fedmr_controller.py`, `src/fedmr_client.py` | The `fedmr` method: sufficient-statistics client, summing server workflow, in-process engine, identity checks against the in-process and pooled fits, curve and metrics files |
-| `results/fedmr/<dataset>/estimates.<basis>[.cf<k>].json` | FedMR full result: estimates, SEs, robust SEs, first-stage diagnostics, rank and conditioning |
-| `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` (for `fedmr`: one metrics row with the estimate, SEs, F and identity-check gaps; the curve carries its 95% band; no per-round plots) |
+| `src/fed2sls_engine.py`, `src/fed2sls_controller.py`, `src/fed2sls_client.py` | The `fed2sls` method: sufficient-statistics client, summing server workflow, in-process engine, identity checks against the in-process and pooled fits, curve and metrics files |
+| `results/fed2sls/<dataset>/estimates.<basis>[.cf<k>].json` | Fed-2SLS full result: estimates, SEs, robust SEs, first-stage diagnostics, rank and conditioning |
+| `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` (for `fed2sls`: one metrics row with the estimate, SEs, F and identity-check gaps; the curve carries its 95% band; no per-round plots) |
 | `results/fitted_curves_all.png`, `results/summary.csv` | Overview across datasets and methods |
 | `workspace/` | Simulator output and per-job logs (git-ignored) |
 
@@ -66,16 +67,16 @@ approximations on the logit and log-hazard scales.
 uv sync                                        # once, at the repository root
 uv run python job.py --dataset quadratic       # 2SRI on one dataset in the NVFlare simulator (~30 s)
 uv run python job.py --all --method naive --method 2sri --method 2sps --engine local --jobs 6   # full sweep, ~1 min
-uv run python job.py --all --method fedmr           # exact federated 2SLS on every continuous set (~40 s each)
+uv run python job.py --all --method fed2sls           # exact federated 2SLS on every continuous set (~40 s each)
 uv run python job.py --dataset cox --method 2sps --rounds 10 --epochs 3 --lr 0.005
 uv run python src/plots.py                     # re-render every plot from results/ without training
 ```
 
-## FedMR: the exact federated 2SLS, no training
+## Fed-2SLS: the exact federated 2SLS, no training
 
-`--method fedmr` runs a different kind of federation on the same files: each
+`--method fed2sls` runs a different kind of federation on the same files: each
 client computes the sufficient statistics of a two-stage least squares MR
-(`flamingo_fedmr`, in `../fedmr/`), the server (`src/fedmr_controller.py`,
+(`flamingo_fedmr`, in `../fedmr/`), the server (`src/fed2sls_controller.py`,
 a `ModelController` that sums rather than averages) adds them and solves,
 and a second round collects the robust-covariance term. Two rounds, no
 epochs, and the result equals the pooled 2SLS to machine precision, with
@@ -83,24 +84,25 @@ standard errors. Only continuous outcomes; binary and survival sets are
 skipped, and the fedsec configs are refused because there are no model
 updates for them to act on. The protocol follows the manifest: site-local
 first stages by default, the shared-instrument protocol when `shared_snps`
-is set (linear basis only through NVFlare).
+is set (through NVFlare the shared protocol runs the linear basis only; the
+local engine runs every variant).
 
 ```bash
-uv run python job.py --dataset linear --method fedmr                    # local first stage, 2 rounds
-uv run python job.py --dataset linear_shared --method fedmr             # shared SNPs across sites
-uv run python job.py --dataset quadratic --method fedmr --fedmr_basis quadratic
-uv run python job.py --dataset linear --method fedmr --fedmr_crossfit 5
-uv run python job.py --all --method fedmr --engine local                # same arithmetic in-process
+uv run python job.py --dataset linear --method fed2sls                    # local first stage, 2 rounds
+uv run python job.py --dataset linear_shared --method fed2sls             # shared SNPs across sites
+uv run python job.py --dataset quadratic --method fed2sls --fed2sls_basis quadratic
+uv run python job.py --dataset linear --method fed2sls --fed2sls_crossfit 5
+uv run python job.py --all --method fed2sls --engine local                # same arithmetic in-process
 ```
 
 `--engine nvflare` runs the protocol in-process afterwards on the same
 files and, for site-specific SNPs, the pooled fit in numpy, and fails
 unless all three agree to 1e-10; the observed gaps are recorded in
-`results/fedmr/<dataset>/metrics.csv` and sit at 1e-16 on every set. The
-`fedmr` row lands on the same fitted-curve and overview plots as the FedAvg
+`results/fed2sls/<dataset>/metrics.csv` and sit at 1e-16 on every set. The
+`fed2sls` row lands on the same fitted-curve and overview plots as the Fed-2SRI and Fed-2SPS
 methods, drawn with its analytic 95% band, and in `results/summary.csv` as
-`theta_X`, `se_X`, `robust_se_X` and `first_stage_F`. The FedAvg 2SRI model
-above and FedMR answer different questions (a flexible curve without an
+`theta_X`, `se_X`, `robust_se_X` and `first_stage_F`. The Fed-2SRI model
+above and Fed-2SLS answer different questions (a flexible curve without an
 analytic CI versus a specified basis with one), and the forest plots in
 `../data/results/` keep both rows. See `../data/docs/federated-exact-mr.md`.
 
@@ -158,6 +160,49 @@ sit. For 2SPS the plot is solid only within two standard deviations of
 outcomes are drawn on the logit scale, which is where the model's `f` lives;
 the binned data points are converted to logits to match. `../data/scripts/federated_nonlinear_mr.py` draws the naive and 2SRI
 curves next to the concatenated 2SLS fit and the summary-statistics IVW line.
+
+## Confidence bands for Fed-2SRI (bootstrap)
+
+A FedAvg fit is a network trained on top of a site-local first stage, so it
+has no closed-form standard error (even classic 2SRI's naive second-stage SE
+ignores the first stage). `--bootstrap B` gets the interval by bootstrapping
+the whole procedure: in each of B replicates every site draws its training
+rows with replacement, refits its first stage, and the federation retrains
+from fresh initial weights. No extra data leaves a site; a replicate is one
+more federated run. The band is the pointwise percentile interval of the
+replicates' final `f(x) - f(0)`.
+
+```bash
+uv run python job.py --dataset quadratic --method 2sri --engine local --bootstrap 200   # ~1.5 min on 16 cores
+```
+
+It adds `curves_bootstrap.csv` (one curve per replicate), `bootstrap.json`,
+and `f_lo` / `f_hi` on the last round of `curves.csv`, so `fitted_curve.png`,
+the dose-response plot and the overview draw the band. The forest plot in
+`../data/scripts/federated_summary_mr.py` projects every replicate on the same
+basis as the point estimate and draws the percentile CI of θ1 (and θ2); its
+printout gives the bootstrap SEs, which the dashboard shows in its table.
+
+What the band assumes (details in `src/bootstrap.py`):
+
+- individuals are independent within a site and sites independent; sites are
+  held fixed, so the band is conditional on these sites;
+- it covers sampling variability of both stages and the randomness of
+  training, not bias: few rounds, weak instruments, or the 2SRI approximation
+  on the logit / log-hazard scale can move the whole band off the truth;
+- it is pointwise, not simultaneous, and zero-width at X = 0 by construction;
+- replicates always run on the local engine (same arithmetic); with
+  `--engine nvflare` only the point estimate comes from NVFlare;
+- not available with `--secure_config`.
+
+On the quadratic set (B = 200) the band contains the true curve at every grid
+point of |X| <= 2. Bootstrap SEs: θ1 0.075, θ2 0.009, against 0.014 and 0.032
+for the exact 2SLS. θ1 carries the confounding correction and depends on the
+weak instruments plus the training randomness. θ2 is tighter because the
+linear control function only corrects the linear part, so the curvature is
+learned from all of X. That extra precision rests on 2SRI's own assumption,
+that the confounding is captured by a linear function of the first-stage
+residual.
 
 ## Robust and privacy-preserving federation (optional)
 

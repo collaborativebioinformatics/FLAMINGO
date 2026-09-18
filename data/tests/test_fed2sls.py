@@ -1,4 +1,4 @@
-"""FedMR must equal pooled 2SLS to machine precision.
+"""Fed-2SLS must equal pooled 2SLS to machine precision.
 
 The references are direct stacked-data projections written out here, not
 another call through the package's matrix helpers, plus the repo's own

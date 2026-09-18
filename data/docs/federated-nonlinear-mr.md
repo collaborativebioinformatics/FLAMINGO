@@ -30,12 +30,9 @@ through the origin. `theta2` is not identifiable from these summaries.
 | quadratic | θ1 = 0.30, θ2 = 0.15 | θ1 0.317 (0.014), θ2 0.149 (0.031) | slope 0.318 (0.016) |
 | threshold | slope 0.30 below 0.5, flat above | θ1 0.225 (0.014), θ2 -0.053 (0.031) | slope 0.224 (0.015) |
 
-A middle route, each site fitting the quadratic 2SLS locally and sharing its
-two coefficients with their covariance, matches the concatenated fit: see the
-"model sumstats" row of `results/sumstats.quadratic.png` and the curved-model
-section of `federated-summary-mr.md`. FedMR (`federated-exact-mr.md`) goes
-one step further and reproduces the concatenated fit exactly from per-site
-cross-product matrices.
+Fed-2SLS (`federated-exact-mr.md`) reproduces the concatenated fit exactly
+from per-site cross-product matrices, so the curve is recoverable without
+pooling rows; see the curved-model section of `federated-summary-mr.md`.
 
 Standard errors in parentheses. Plots: `results/nonlinear.quadratic.png`,
 `results/nonlinear.threshold.png`. Each shows the true curve, the pooled fit
@@ -59,8 +56,8 @@ would locate the cutoff.
 ## Federated learning: naive and as MR
 
 The plots carry two more dashed lines from `../federated_learning/`
-(`job.py --dataset quadratic --method naive --method 2sri`), an NVFlare
-FedAvg MLP trained across the ten sites without pooling individual data.
+(`job.py --dataset quadratic --method naive --method 2sri`), the Fed-2SRI
+network (an MLP trained with FedAvg) across the ten sites without pooling individual data.
 
 **Naive (green).** Fits `E[Y | X]` directly. It recovers the *shape* of the
 association, quadratic curvature and the threshold kink alike, because a
@@ -87,12 +84,12 @@ individual data between sites. What it needs beyond the summary-statistics
 route is many rounds of model-weight exchange rather than one exchange of
 per-SNP effects.
 
-**FedMR (violet dotted).** The quadratic 2SLS itself, federated exactly:
+**Fed-2SLS (violet dotted).** The quadratic 2SLS itself, federated exactly:
 each site fits its first stage, forms `xhat`, and releases the centred
 cross-products of `[xhat, xhat²]`, `[X, X²]` and `Y` (a 3x3, a 3x3 and a few
 vectors); the coordinator sums and solves. The curve is the concatenated
 curve to 1e-16, with the same covariance, in one round. It is drawn on top
-of the pooled fit so that it is visibly the same line. What FedMR cannot do
+of the pooled fit so that it is visibly the same line. What Fed-2SLS cannot do
 is what the 2SRI MLP does on the threshold set: find a shape it was not
 given a basis for. See `federated-exact-mr.md`.
 

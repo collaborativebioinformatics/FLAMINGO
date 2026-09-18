@@ -284,41 +284,42 @@ def output_block(step, label, path, paths, level: str = "####") -> None:
 
 def show_outputs(step, params, paths, skip: set | None = None) -> None:
     """Every asset a step produced, each under its own heading."""
+    params = runner.full(params)
     for label, path in step.outputs(params, paths).items():
         if not path.exists() or (skip and (step.key, label) in skip):
             continue
         output_block(step, label, path, paths)
 
 
-def headline_metrics(summary: dict) -> None:
-    """The estimates every run is judged on, from the summary-MR printout."""
+def headline_metrics(summary: dict, federated: dict, models: list) -> None:
+    """The estimates every run is judged on, from the summary-MR printout, for the selected models."""
     if not summary:
         return
     cards = []
-    if "meta_ivw" in summary:
+    if "sumstats" in models and "meta_ivw" in summary:
         est, se = summary["meta_ivw"]
-        cards.append(stat_card("Meta IVW", f"{est:.3f}",
+        cards.append(stat_card(runner.MODELS["sumstats"], f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
-    if "pooled" in summary:
+    if "fed2sls" in models and "fed2sls" in summary:
+        est, se = summary["fed2sls"][:2]
+        cards.append(stat_card(runner.MODELS["fed2sls"], f"{est:.3f}",
+                               f"95% CI ± {1.96 * se:.3f}", "pink"))
+    if "2sri" in models and "2sri" in federated:
+        cards.append(stat_card(runner.MODELS["2sri"], f"{federated['2sri'][0]:.3f}",
+                               "from the curve, no CI", "pink"))
+    if "pooled" in models and "pooled" in summary:
         est, se = summary["pooled"]
-        cards.append(stat_card("Pooled (individual-level)", f"{est:.3f}",
+        cards.append(stat_card(runner.MODELS["pooled"], f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "benchmark"))
-    if "pooled_naive" in summary:
-        cards.append(stat_card("Pooled naive (no IV)", f"{summary['pooled_naive'][0]:.3f}",
-                               "confounded", "coral"))
-    if "heterogeneity_q" in summary:
+    if "sumstats" in models and "heterogeneity_q" in summary:
         cards.append(stat_card("Heterogeneity Q", f"{summary['heterogeneity_q'][0]:.1f}",
                                "across sites", "neutral"))
     stat_row(cards)
 
-    if {"model_sumstats", "pooled_quadratic"} & summary.keys():
-        rows = []
-        for key, name in (("model_sumstats", "Summary statistics (meta of site quadratic fits)"),
-                          ("pooled_quadratic", "Concatenated quadratic 2SLS")):
-            if key in summary:
-                t1, t1se, t2, t2se = summary[key]
-                rows.append({"estimator": name, "θ1": t1, "θ1 se": t1se, "θ2": t2, "θ2 se": t2se})
-        st.dataframe(pl.DataFrame(rows), width="stretch", hide_index=True)
+    if "pooled" in models and "pooled_quadratic" in summary:
+        t1, t1se, t2, t2se = summary["pooled_quadratic"]
+        st.dataframe(pl.DataFrame([{"estimator": "Concatenated quadratic 2SLS", "θ1": t1, "θ1 se": t1se,
+                                    "θ2": t2, "θ2 se": t2se}]), width="stretch", hide_index=True)
 
     if "target_label" in summary:
         st.caption(f"Target: {summary['target_label']}")
@@ -326,13 +327,14 @@ def headline_metrics(summary: dict) -> None:
                "(benchmark only) · coral is the confounded estimate MR is there to beat.")
 
 
-def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFrame:
+def comparison_table(summary: dict, federated: dict, params: dict, federated_se: dict | None = None) -> pl.DataFrame:
     """One row per estimator, with what each is allowed to see.
 
     The point of the comparison is that the rows needing individual-level data
     are benchmarks a real federation could not run.
     """
     curved = params["shape"] in runner.CURVED_SHAPES
+    models = params["models"]
 
     def row(estimator, sees, theta1=None, theta2=None, se1=None):
         return {"estimator": estimator, "sees": sees,
@@ -340,25 +342,25 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
 
     rows = [row("Truth", "simulation parameters", params["theta1"],
                 params.get("theta2") if curved else None)]
-    if "meta_ivw" in summary:
+    if "sumstats" in models and "meta_ivw" in summary:
         est, se = summary["meta_ivw"]
-        rows.append(row("Summary-stat IVW meta", "per-SNP summary statistics", est,
-                        None, se))
-    if curved and "model_sumstats" in summary:
-        t1, se1, t2, _ = summary["model_sumstats"]
-        rows.append(row("Summary-stat model meta", "per-site quadratic fits", t1, t2, se1))
-    if curved and "pooled_quadratic" in summary:
-        t1, se1, t2, _ = summary["pooled_quadratic"]
-        rows.append(row("Concatenated quadratic 2SLS", "pooled individual rows", t1, t2, se1))
-    elif "pooled" in summary:
-        est, se = summary["pooled"]
-        rows.append(row("Concatenated 2SLS", "pooled individual rows", est, None, se))
-    for method, coef in sorted(federated.items()):
-        rows.append(row(f"Federated FedAvg · {method}", "model updates only",
-                        coef[0], coef[1] if len(coef) > 1 else None))
-    if "pooled_naive" in summary:
-        rows.append(row("Pooled naive (no instruments)", "pooled individual rows",
-                        summary["pooled_naive"][0], None))
+        rows.append(row(runner.MODELS["sumstats"], "per-SNP summary statistics", est, None, se))
+    if "fed2sls" in models and "fed2sls" in summary:
+        v = summary["fed2sls"]
+        rows.append(row(runner.MODELS["fed2sls"], "summed sufficient statistics", v[0],
+                        v[2] if len(v) > 2 else None, v[1]))
+    if "2sri" in models and "2sri" in federated:
+        coef = federated["2sri"]
+        se = (federated_se or {}).get("2sri")          # bootstrap SE, when the step ran --bootstrap
+        rows.append(row(runner.MODELS["2sri"], "model updates only", coef[0], coef[1] if len(coef) > 1 else None,
+                        se[0] if se else None))
+    if "pooled" in models:
+        if curved and "pooled_quadratic" in summary:
+            t1, se1, t2, _ = summary["pooled_quadratic"]
+            rows.append(row(runner.MODELS["pooled"], "pooled individual rows", t1, t2, se1))
+        elif "pooled" in summary:
+            est, se = summary["pooled"]
+            rows.append(row(runner.MODELS["pooled"], "pooled individual rows", est, None, se))
     return pl.DataFrame(rows, infer_schema_length=None)
 
 
@@ -432,38 +434,36 @@ with tab_experiments:
         run_params = dict(asset["params"])
         run_paths = asset["paths"]
 
-        st.subheader("Federated learning")
+        st.subheader("Models")
         available = runner.fl_available()
         if not available:
             st.warning(
                 f"`{runner.FL_PYTHON}` cannot import torch and NVFlare. Run `uv sync` "
                 "at the repository root, or set `FLAMINGO_FL_PYTHON` to an environment "
-                "that has them. The MR steps below run without it."
+                "that has them. The two federated models are unavailable until then."
             )
-        run_params["run_federated"] = st.checkbox(
-            "Run the federated workflow", value=available, disabled=not available,
-            help="Trains one client per site with FedAvg, then overlays the federated "
-                 "curve on the MR plots below.",
+        offered = [m for m in runner.MODELS if available or m not in runner.FL_METHODS]
+        run_params["models"] = st.multiselect(
+            "Model outputs", offered, default=offered, format_func=lambda m: runner.MODELS[m],
+            help="  \n".join(f"**{runner.MODELS[m]}**: {runner.MODEL_HELP[m]}" for m in runner.MODELS),
         )
-        c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
-        run_params["fl_methods"] = c1.multiselect(
-            "Methods", runner.FL_METHODS, default=runner.EXPERIMENT_DEFAULTS["fl_methods"],
-            disabled=not run_params["run_federated"],
-            help="naive: outcome on X directly, the confounded association. "
-                 "2sri: site-local first stage, then a federated control function. "
-                 "2sps: site-local first stage, then federated on the predicted X.",
-        )
+        federated_on = any(m in runner.FL_METHODS for m in run_params["models"])
+        c2, c3, c4, c5 = st.columns([2, 1, 1, 1])
         run_params["fl_engine"] = c2.selectbox(
-            "Engine", ["local", "nvflare"], disabled=not run_params["run_federated"],
-            help="local reproduces FedAvg's arithmetic in-process in seconds; nvflare "
+            "Federated engine", ["local", "nvflare"], disabled=not federated_on,
+            help="local reproduces the federation's arithmetic in-process in seconds; nvflare "
                  "stands up the real simulated federation and costs about 40 s per job.",
         )
         run_params["fl_rounds"] = c3.number_input(
-            "Rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"],
-            disabled=not run_params["run_federated"])
+            "Fed-2SRI rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"], disabled=not federated_on)
         run_params["fl_epochs"] = c4.number_input(
-            "Local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"],
-            disabled=not run_params["run_federated"])
+            "Fed-2SRI local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"], disabled=not federated_on)
+        run_params["fl_bootstrap"] = c5.number_input(
+            "Fed-2SRI bootstrap B", 0, 2000, runner.EXPERIMENT_DEFAULTS["fl_bootstrap"], step=50,
+            disabled="2sri" not in run_params["models"],
+            help="Confidence band for Fed-2SRI: each replicate, every site resamples its own rows, "
+                 "refits its first stage, and the federation retrains; the band is the pointwise "
+                 "95% percentile interval. About 1.5 min for 200 on the local engine. 0 = no band.")
 
         steps = runner.steps_for(run_params)
         st.subheader("Run the experiment chain")
@@ -481,6 +481,7 @@ with tab_experiments:
             log = (run_paths.logs / "summary_mr.log")
             summary = runner.parse_summary(log.read_text()) if log.exists() else {}
             federated = runner.parse_federated(log.read_text()) if log.exists() else {}
+            federated_se = runner.parse_federated_se(log.read_text()) if log.exists() else {}
 
             st.divider()
 
@@ -488,25 +489,37 @@ with tab_experiments:
             # estimator against the truth. It is skipped further down so it is
             # not shown twice.
             hero = runner.hero_output(run_params, run_paths)
+            headline = []                      # (step, label) pairs shown up here, skipped below
             if hero:
                 hero_step, hero_label, hero_path = hero
                 output_block(hero_step, hero_label, hero_path, run_paths, level="###")
                 st.caption("Every estimator against the true curve, over the exposure "
                            "distribution the sites actually cover.")
+                headline.append((hero_step.key, hero_label))
+            # The forest plot is always the second figure: per-site estimates and the
+            # combined rows for every selected model. On linear and cox shapes it is
+            # already the headline figure.
+            forest_step = runner.STEPS["summary_mr"]
+            forest_path = forest_step.outputs(runner.full(run_params), run_paths).get("Forest plot")
+            if forest_path and forest_path.exists() and (forest_step.key, "Forest plot") not in headline:
+                output_block(forest_step, "Forest plot", forest_path, run_paths, level="###")
+                st.caption("Each site's own estimate, then the selected models over all sites.")
+                headline.append((forest_step.key, "Forest plot"))
+            if headline:
                 st.divider()
 
             st.subheader("Key results")
-            headline_metrics(summary)
+            headline_metrics(summary, federated, run_params["models"])
 
             st.markdown("#### All estimators")
             st.caption("Every row targets the same causal curve; they differ in what "
                        "each one is allowed to see.")
-            st.dataframe(comparison_table(summary, federated, run_params),
+            st.dataframe(comparison_table(summary, federated, run_params, federated_se),
                          width="stretch", hide_index=True)
 
             st.divider()
             st.subheader("All outputs")
-            skip = {(hero[0].key, hero[1])} if hero else set()
+            skip = set(headline)
             for step in steps:
                 if step.key == "simulate":
                     continue

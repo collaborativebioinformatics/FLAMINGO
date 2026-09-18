@@ -41,7 +41,24 @@ DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 # The repository is one environment, so every step runs in this interpreter.
 # Both overrides remain for pointing a step at a separate environment.
 FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
-FL_METHODS = ("naive", "2sri", "2sps")
+FL_METHODS = ("2sri", "fed2sls")   # the models that run through federated_learning/job.py
+
+# The four model outputs the experiment tab offers, all on by default. The two
+# federated ones need the job.py step; the other two come from federated_summary_mr.py.
+MODELS = {
+    "pooled": "Concatenated 2SLS",
+    "sumstats": "Sumstats IVW",
+    "fed2sls": "Fed-2SLS",
+    "2sri": "Fed-2SRI",
+}
+# One line each, for help text and captions; the names above stay short.
+MODEL_HELP = {
+    "pooled": "one 2SLS on the pooled individual rows; the benchmark a real federation cannot run",
+    "sumstats": "per-SNP effects from each site, IVW within site, inverse-variance meta-analysis across sites",
+    "fed2sls": "exact 2SLS from summed sufficient statistics, no training; continuous outcomes only",
+    "2sri": "site-local first stage, then a control-function network trained across sites with FedAvg",
+}
+FOREST_ROWS = {"pooled": "pooled", "sumstats": "sumstats", "fed2sls": "fed2sls", "2sri": "federated"}
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
@@ -49,11 +66,14 @@ CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recove
 # Options that change what is run over a dataset, rather than the dataset itself,
 # so they deliberately stay out of the run id.
 EXPERIMENT_DEFAULTS: dict = {
-    "run_federated": True,
-    "fl_methods": ["naive", "2sri"],
+    "models": list(MODELS),
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
+    # bootstrap replicates for the Fed-2SRI confidence band (federated_learning/src/bootstrap.py).
+    # Off by default: each replicate re-trains the federation, so B=200 multiplies the step's time
+    # by about 200. Set B in the experiment tab when the band is wanted.
+    "fl_bootstrap": 0,
 }
 
 DEFAULTS: dict = {
@@ -91,6 +111,8 @@ def full(params: dict) -> dict:
     p = canonical(params)
     for key, default in EXPERIMENT_DEFAULTS.items():
         p[key] = params.get(key, default)
+    p["fl_methods"] = [m for m in FL_METHODS if m in p["models"]]   # derived: which models job.py runs
+    p["run_federated"] = bool(p["fl_methods"])
     return p
 
 
@@ -158,6 +180,8 @@ class Step:
     # Output paths alone are not enough: rerunning with more rounds writes the
     # same file names, so without this a changed setting would look cached.
     signature: Callable[[dict], dict] = lambda p: {}
+    # Runs before the cache check and the script (e.g. to clear outputs of a deselected model).
+    before: Callable[[dict, RunPaths], None] = lambda p, paths: None
     python: str = field(default=DATA_PYTHON)
     cwd: Path = field(default=DATA_DIR)
 
@@ -197,23 +221,41 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
     ]
     for method in p["fl_methods"]:
         argv += ["--method", method]
+    if p["shape"] in CURVED_SHAPES:
+        # Fed-2SLS on [X, X^2], so it reports theta2 next to the concatenated quadratic fit
+        argv += ["--fed2sls_basis", "quadratic"]
+    if p.get("fl_bootstrap") and "2sri" in p["fl_methods"]:
+        argv += ["--bootstrap", p["fl_bootstrap"]]
     return argv
 
 
-# Output labels double as section headings in the dashboard, so they read as titles.
+# One name per federated method, used for the output headings and the estimator table.
+# Each says whether it is MR, which MR design, and how it is federated.
 METHOD_LABELS = {
-    "naive": "Federated · naive (no instruments)",
-    "2sri": "Federated · 2SRI (control function)",
-    "2sps": "Federated · 2SPS (predicted exposure)",
+    "2sri": "Fed-2SRI · fitted curve",
+    "fed2sls": "Fed-2SLS · fitted curve",
 }
+
+
+def method_label(method: str) -> str:
+    return METHOD_LABELS.get(method, f"Federated · {method}")
+
+
+def _federated_clear_stale(p: dict, paths: RunPaths) -> None:
+    """Drop results of federated methods that are no longer selected. job.py only writes the
+    methods it runs, and the overview plot and the forest's curve lookup read whatever is on
+    disk, so a deselected method would otherwise linger from an earlier run."""
+    import shutil
+    for method in ("naive", "2sri", "2sps", "fed2sls"):
+        if method not in p["fl_methods"]:
+            shutil.rmtree(paths.fl / method, ignore_errors=True)
 
 
 def _federated_outputs(p: dict, paths: RunPaths) -> dict:
     out = {}
     for method in p["fl_methods"]:
-        label = METHOD_LABELS.get(method, f"Federated · {method}")
-        out[label] = paths.fl / method / p["shape"] / "fitted_curve.png"
-    out["Federated · all methods"] = paths.fl / "fitted_curves_all.png"
+        out[method_label(method)] = paths.fl / method / p["shape"] / "fitted_curve.png"
+    out["Federated fitted curves"] = paths.fl / "fitted_curves_all.png"
     return out
 
 
@@ -241,25 +283,30 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (NVFlare FedAvg)",
+        label="Federated learning (Fed-2SRI, Fed-2SLS)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
         argv=_federated_argv,
         outputs=_federated_outputs,
-        signature=lambda p: {k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
-        applies=lambda p: bool(p.get("run_federated")) and bool(p.get("fl_methods")),
+        before=_federated_clear_stale,
+        signature=lambda p: {**{k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs",
+                                                   "fl_bootstrap")},
+                             "fed2sls_basis": "quadratic" if p["shape"] in CURVED_SHAPES else "linear"},
+        applies=lambda p: bool(p["fl_methods"]),
     ),
     Step(
         key="summary_mr",
-        label="Conventional MR (per-site sumstats + IVW meta-analysis)",
+        label="Conventional MR (Sumstats IVW, Concatenated 2SLS, forest plot)",
         script=SCRIPTS / "federated_summary_mr.py",
         argv=lambda p, paths: [
             "--shape", p["shape"],
             "--sites", paths.sites_for(p["shape"]),
             "--out", _sumstats_stem(p, paths),
             "--fl-results", paths.fl,
+            "--rows", *[FOREST_ROWS[m] for m in MODELS if m in p["models"]],
         ],
+        signature=lambda p: {"models": [m for m in MODELS if m in p["models"]]},
         outputs=lambda p, paths: {
             "Forest plot": Path(f"{_sumstats_stem(p, paths)}.png"),
             "Per-site estimates": Path(f"{_sumstats_stem(p, paths)}.csv"),
@@ -267,20 +314,31 @@ PIPELINE: tuple[Step, ...] = (
     ),
     Step(
         key="nonlinear_mr",
-        label="Non-linear MR (pooled quadratic 2SLS vs the sumstats line)",
+        label="Non-linear MR (dose-response curve)",
         script=SCRIPTS / "federated_nonlinear_mr.py",
         argv=lambda p, paths: [
             "--shape", p["shape"],
             "--sites", paths.sites_for(p["shape"]),
             "--out", _nonlinear_png(p, paths),
             "--federated", paths.fl,
+            # the Fed-2SRI curve is the one federated curve on the dose-response plot
+            "--federated_methods", *(["2sri"] if "2sri" in p["models"] else []),
         ],
         outputs=lambda p, paths: {"Dose–response curve": _nonlinear_png(p, paths)},
         applies=lambda p: p["shape"] in CURVED_SHAPES,
+        signature=lambda p: {"federated_methods": ["2sri"] if "2sri" in p["models"] else []},
     ),
 )
 
 STEPS = {s.key: s for s in PIPELINE}
+
+# Bump when the look of a figure changes (colours, labels, layout) so that cached
+# runs re-render: every plotting step folds it into its signature.
+FIGURE_VERSION = 4
+for _step in PIPELINE:
+    if _step.key != "simulate":
+        _sig = _step.signature
+        object.__setattr__(_step, "signature", (lambda p, _s=_sig: {**_s(p), "figure_version": FIGURE_VERSION}))
 
 # What the results page leads with: the dose-response curve where the shape has
 # one to recover, otherwise the forest plot.
@@ -336,6 +394,8 @@ def execute(step: Step, params: dict, paths: RunPaths, force: bool = False) -> S
     params = full(params)
     paths.mkdirs()
     log = paths.logs / f"{step.key}.log"
+    params = full(params)          # every callback sees the derived keys (fl_methods, run_federated)
+    step.before(params, paths)     # also when cached: stale outputs from other selections must go
     if not force and is_complete(step, params, paths) and log.exists():
         return StepResult(step.key, True, 0, "", log.read_text(), 0.0, cached=True)
 
@@ -423,9 +483,9 @@ _NUM = r"(-?\d+\.?\d*)"
 _PATTERNS = {
     "meta_ivw": rf"meta IVW\s+{_NUM}\s+se\s+{_NUM}",
     "pooled": rf"pooled (?:2SLS|2SPS Cox)\s+{_NUM}\s+se\s+{_NUM}",
-    "pooled_naive": rf"pooled naive\s+{_NUM}",
+    # `federated Fed-2SLS: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
+    "fed2sls": rf"federated Fed-2SLS:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
     "heterogeneity_q": rf"heterogeneity Q\s+{_NUM}",
-    "model_sumstats": rf"model sumstats[^:]*:\s*theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
     "pooled_quadratic": rf"concatenated quadratic 2SLS:\s+theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
 }
 
@@ -442,6 +502,18 @@ def parse_federated(output: str) -> dict:
     return found
 
 
+def parse_federated_se(output: str) -> dict:
+    """Bootstrap standard errors of those parameters, when the federated step ran --bootstrap.
+
+    The same line then reads `federated NVFlare 2sri : 0.295  0.164   (from curve,
+    bootstrap B=200: se 0.012  0.020; 95% CI [...] [...])`.
+    """
+    found = {}
+    for method, numbers in re.findall(r"federated NVFlare\s+(\w+)\s*:.*?bootstrap B=\d+: se ([-\d. ]+?);", output):
+        found[method] = tuple(float(v) for v in numbers.split())
+    return found
+
+
 def parse_summary(output: str) -> dict:
     """Pull the headline estimates out of federated_summary_mr.py's printout.
 
@@ -452,7 +524,7 @@ def parse_summary(output: str) -> dict:
     for name, pattern in _PATTERNS.items():
         m = re.search(pattern, output)
         if m:
-            found[name] = tuple(float(g) for g in m.groups())
+            found[name] = tuple(float(g) for g in m.groups() if g is not None)
     target = re.search(r"target \((.+?)\)\s+heterogeneity", output)
     if target:
         found["target_label"] = target.group(1)

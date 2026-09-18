@@ -108,9 +108,9 @@ site rows, coloured by family:
 
 | family | row(s) | what leaves each site | estimate |
 |---|---|---|---|
-| sumstats (orange) | `sumstats` (per-SNP), and `sumstats: site models` for curved shapes | per-SNP GWAS effects; or a fitted model's coefficients and covariance | inverse-variance meta-analysis, with CI |
-| federated: FedAvg (green) | `federated: FedAvg` | model weights each round, via NVFlare FedAvg | the last-round global 2SRI model from `../federated_learning/results/2sri/<dataset>/curves.csv`, summarised into the plot's parameters by least squares on the curve over -2 <= X <= 2; no analytic CI |
-| federated: FedMR (violet) | `federated: FedMR` | centred cross-product matrices, one round (plus one for the robust SE) | exact federated 2SLS from `results/fedmr.<dataset>.csv` (`scripts/federated_exact_mr.py`), identical to the concatenated row, with CI; see `federated-exact-mr.md` |
+| sumstats (orange) | `sumstats: per-SNP` | per-SNP GWAS effects | inverse-variance meta-analysis, with CI |
+| federated: Fed-2SRI (green) | `federated: Fed-2SRI` | model weights each round, via NVFlare FedAvg | the last-round global 2SRI model from `../federated_learning/results/2sri/<dataset>/curves.csv`, summarised into the plot's parameters by least squares on the curve over -2 <= X <= 2; no analytic CI |
+| federated: Fed-2SLS (violet) | `federated: Fed-2SLS` | centred cross-product matrices, one round (plus one for the robust SE) | exact federated 2SLS from `results/fed2sls.<dataset>.csv` (`scripts/federated_exact_mr.py`), identical to the concatenated row, with CI; see `federated-exact-mr.md` |
 | concatenated (black) | `concatenated` | individual rows | one 2SLS (or stratified 2SPS Cox), with CI |
 
 Grey ticks on any row are the corresponding fit without instruments: naive
@@ -137,43 +137,34 @@ it overshoots the log hazard ratio. Without a standard error it is not
 possible to say from one run how much of that is noise; a seed sweep of the
 NVFlare job would be the way to find out.
 
-The `federated: FedMR` row is the other federated route: the same
+The `federated: Fed-2SLS` row is the other federated route: the same
 individual-level 2SLS as the concatenated row, computed from per-site
 cross-product matrices and therefore identical to it, with a confidence
 interval. On every continuous set the two rows coincide to 1e-16
-(`results/fedmr.<shape>.csv`). FedMR needs a specified basis, so it does
-not replace the FedAvg curve; the two rows answer different questions.
+(`results/fed2sls.<shape>.csv`). Fed-2SLS needs a specified basis, so it does
+not replace the Fed-2SRI curve; the two rows answer different questions.
 
 ## Curved models: two parameters
 
 For `quadratic` and `threshold` the forest plot has two columns, `theta1`
-(slope at X = 0) and `theta2` (curvature in a quadratic basis), and a third
-combined row. The three federation levels it compares:
+(slope at X = 0) and `theta2` (curvature in a quadratic basis). The
+federation levels it compares:
 
 | level | what leaves each site | can estimate |
 |---|---|---|
 | per-SNP sumstats | per-SNP `beta_x`, `beta_y` and standard errors | average slope only; `theta2` is not identifiable |
-| model sumstats | the site's own quadratic 2SLS: two coefficients and their 2x2 covariance | both, via a multivariate inverse-variance meta-analysis |
+| federated: Fed-2SRI | model weights each round | both, read off the fitted curve, no CI |
+| federated: Fed-2SLS | centred cross-product matrices | both, exactly the concatenated fit, with CI |
 | concatenated | individual rows | both, in one quadratic 2SLS with site intercepts |
 
-Per-site rows show the local quadratic fit (filled, both columns) and the
-per-SNP IVW slope (hollow, first column only).
-
-| set | route | θ1 | θ2 |
-|---|---|---|---|
-| quadratic (θ1 0.30, θ2 0.15) | model sumstats | 0.318 (0.015) | 0.156 (0.031) |
-| | concatenated | 0.317 (0.014) | 0.149 (0.031) |
-| ushape (θ1 0, θ2 0.15) | model sumstats | 0.018 (0.015) | 0.156 (0.031) |
-| | concatenated | 0.017 (0.014) | 0.149 (0.031) |
-| threshold (kink at 0.5) | model sumstats | 0.225 (0.015) | -0.045 (0.031) |
-| | concatenated | 0.225 (0.014) | -0.053 (0.031) |
-
-Sharing fitted model parameters instead of GWAS rows recovers the curve with
-the same precision as pooling the data: `theta2` standard errors are equal to
-three decimals and the estimates differ by 0.007. Per-site `theta2` intervals
-are wide, since the squared prediction is a weak instrument at F around 10,
-but the meta-analysis lands on the truth. Per-SNP summary statistics cannot
-produce `theta2` at all, which the plot marks in the second column.
+Per-site rows show the site's own local quadratic 2SLS (filled, both
+columns) and its per-SNP IVW slope (hollow, first column only). Per-site
+`theta2` intervals are wide, since the squared prediction is a weak
+instrument at F around 10. Per-SNP summary statistics cannot produce
+`theta2` at all, which the plot marks in the second column; the federated
+rows recover it. (An earlier version also meta-analysed the sites' own
+quadratic fits as a "model sumstats" row; it was dropped because Fed-2SLS
+gives that pooled answer exactly.)
 
 ## Summary statistics versus concatenated
 

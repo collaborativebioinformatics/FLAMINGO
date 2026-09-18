@@ -1,4 +1,4 @@
-"""NVFlare client for FedMR. Builds this site's design once, then answers the
+"""NVFlare client for Fed-2SLS. Builds this site's design once, then answers the
 controller's two tasks: its sufficient statistics, and (given theta) its H.
 
 The individual-level data never leave: what is sent is what
@@ -52,11 +52,11 @@ def main() -> None:
             print(f"[{name}] n={site.n} design Z{design.Z.shape} W{design.W.shape}", flush=True)
         if task == "stats":
             st = fm.site_stats(design)
-            reply = FLModel(params=st.arrays(), params_type=ParamsType.FULL, meta={"fedmr": st.meta()})
+            reply = FLModel(params=st.arrays(), params_type=ParamsType.FULL, meta={"fed2sls": st.meta()})
         elif task == "robust":
             H = fm.site_robust_stats(design, message.meta["theta"])
             reply = FLModel(params={"H": H}, params_type=ParamsType.FULL,
-                            meta={"fedmr": {"site": name, "z_names": list(design.z_names)}})
+                            meta={"fed2sls": {"site": name, "z_names": list(design.z_names)}})
         else:
             raise SystemExit(f"unknown task {task!r}")
         print(f"[{name}] sent {task}", flush=True)
