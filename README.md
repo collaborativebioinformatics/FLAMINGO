@@ -67,7 +67,7 @@ uv run streamlit run app.py
 
 See [dashboard/README.md](dashboard/README.md).
 
-[![Launch the dashboard (TODAY ONLY!)](https://img.shields.io/badge/Launch%20the%20dashboard-c2417a?style=for-the-badge&logo=streamlit&logoColor=white)](https://overview-contacted-motivation-acquired.trycloudflare.com)
+[![Launch the dashboard (TODAY ONLY!)](https://img.shields.io/badge/Launch%20the%20dashboard-c2417a?style=for-the-badge&logo=streamlit&logoColor=white)](https://dental-pursuit-lawyers-hope.trycloudflare.com)
 
 ![Dashborad screengrab](images/dashboard_screengrab.png)
 
