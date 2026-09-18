@@ -59,7 +59,8 @@ def last_curve(curves):
 
 def last_band(curves):
     """(x, f_lo, f_hi) of the last round, anchored like last_curve, or None when the run
-    carries no analytic band (the FedAvg methods)."""
+    carries no band: Fed-2SLS has an analytic one, the FedAvg methods one only after
+    job.py --bootstrap (src/bootstrap.py)."""
     if not {"f_lo", "f_hi"} <= set(curves.columns):
         return None
     last = curves["round"].max()
@@ -156,7 +157,11 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
                 ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=st["band_alpha"], lw=0, zorder=2)
             ax.plot(x, f, **S.line(st), zorder=4, label=st["label"])
             continue
-        ax.plot(x, f, **S.line(st), zorder=4, label=f'{st["label"]}, round {last}')
+        band = last_band(curves)          # present when job.py ran --bootstrap
+        if band is not None:
+            ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=0.15, lw=0, zorder=2)
+        ax.plot(x, f, **S.line(st), zorder=4,
+                label=f'{st["label"]}, round {last}' + (", bootstrap band" if band is not None else ""))
     tc = true_curve(manifest, x_ref)
     if tc is not None:
         ax.plot(x_ref, tc - np.interp(0.0, x_ref, tc), **S.line(S.TRUTH), zorder=3, label="true causal curve f(X)")

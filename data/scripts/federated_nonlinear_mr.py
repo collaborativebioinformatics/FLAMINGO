@@ -63,17 +63,23 @@ def sumstats_slope(sites) -> tuple[float, float]:
     return float(np.sum(w * est) / np.sum(w)), float(np.sqrt(1 / np.sum(w)))
 
 
-def federated_curve(path: Path, x: np.ndarray) -> tuple[np.ndarray, int] | None:
+def federated_curve(path: Path, x: np.ndarray) -> tuple[np.ndarray, int, tuple | None] | None:
     """Last-round global-model f(X) from the NVFlare run, centred at X = 0 and
-    interpolated onto x. Returns (curve, round) or None if the file is missing."""
+    interpolated onto x. Returns (curve, round, band) or None if the file is missing;
+    band is (lo, hi) on x when job.py ran --bootstrap (f_lo / f_hi columns), else None."""
     if not path.exists():
         return None
-    df = pl.read_csv(path)
+    # f_lo / f_hi are empty before the last round, so polars would infer them as text from the first rows
+    df = pl.read_csv(path, schema_overrides={"f_lo": pl.Float64, "f_hi": pl.Float64})
     last = df["round"].max()
-    c = df.filter(pl.col("round") == last).group_by("x").agg(pl.col("f").mean()).sort("x")
+    cols = [c for c in ("f", "f_lo", "f_hi") if c in df.columns]
+    c = df.filter(pl.col("round") == last).group_by("x").agg(pl.col(cols).mean()).sort("x")
     xs, fs = c["x"].to_numpy(), c["f"].to_numpy()
-    fs = fs - np.interp(0.0, xs, fs)
-    return np.interp(x, xs, fs), int(last)
+    f0 = np.interp(0.0, xs, fs)
+    band = None
+    if {"f_lo", "f_hi"} <= set(cols) and c["f_lo"].null_count() == 0:
+        band = (np.interp(x, xs, c["f_lo"].to_numpy() - f0), np.interp(x, xs, c["f_hi"].to_numpy() - f0))
+    return np.interp(x, xs, fs - f0), int(last), band
 
 
 def main() -> None:
@@ -131,7 +137,11 @@ def main() -> None:
             print(f"no federated {m} curve under {a.federated}; run federated_learning/job.py "
                   f"--dataset {a.shape} --method {m} to add it")
             continue
-        ax.plot(x, fl[m][0], **S.line(style), label=f"{label}, round {fl[m][1]}")
+        band = fl[m][2]
+        if band is not None:
+            ax.fill_between(x, band[0], band[1], color=style["color"], alpha=0.14, linewidth=0)
+        ax.plot(x, fl[m][0], **S.line(style),
+                label=f"{label}, round {fl[m][1]}" + ("\n    shaded: pointwise 95% bootstrap band" if band is not None else ""))
         print(f"federated {m} curve:          from {a.federated / m / a.shape}")
     X_all = np.concatenate([s[1] for s in sites])
     ax2 = ax.twinx()

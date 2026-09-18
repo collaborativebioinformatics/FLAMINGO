@@ -178,8 +178,10 @@ def _family_rows(ax, y_sites, rows_y, res, n_all, families) -> None:
 
 
 def forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, shape, out: Path,
-           fed2sls=None, rows=FAMILIES) -> None:
-    """rows: which combined rows to draw (sumstats, federated, fed2sls, pooled); site rows always."""
+           fed2sls=None, rows=FAMILIES, fl_ci_=None) -> None:
+    """rows: which combined rows to draw (sumstats, federated, fed2sls, pooled); site rows always.
+    fl_ci_: fl_ci()'s bootstrap intervals for the Fed-2SRI row, when there are any."""
+    fl_ci_ = fl_ci_ or {}
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
     rows_y = family_positions(rows)
@@ -193,8 +195,8 @@ def forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, shap
                     ecolor=SUMSTATS_COLOR, elinewidth=3, label="sumstats: meta-analysis of site IVW")
     if "federated" in rows_y:
         if "2sri" in fl:
-            ax.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
-                       label="federated: Fed-2SRI, FedAvg global model (no CI)")
+            _fl_marker(ax, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0,
+                       "federated: Fed-2SRI, FedAvg global model")
         else:
             ax.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax.get_yaxis_transform(),
                     ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
@@ -282,6 +284,44 @@ def fl_params(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RE
     return out
 
 
+def fl_ci(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RESULTS) -> dict[str, dict]:
+    """Bootstrap intervals for the parameters fl_params reads off the federated curves.
+
+    Present only when job.py ran with --bootstrap, which leaves curves_bootstrap.csv
+    (one anchored final curve per replicate) next to curves.csv. Each replicate's
+    curve is projected on the same basis and range as the point estimate; the
+    interval is the percentile interval of those projections and `se` their
+    standard deviation. Returns {"2sri": {"lo", "hi", "se", "B", "level"}}."""
+    out = {}
+    for method in ("2sri",):
+        path = root / method / dataset / "curves_bootstrap.csv"
+        if not path.exists():
+            continue
+        info = root / method / dataset / "bootstrap.json"
+        level = json.loads(info.read_text()).get("level", 0.95) if info.exists() else 0.95
+        boot = pl.read_csv(path).filter(pl.col("x").abs() <= x_max + 1e-9).sort(["rep", "x"])
+        coefs = []
+        for _, rep in boot.group_by("rep"):
+            x, f = rep["x"].to_numpy(), rep["f"].to_numpy()
+            basis = np.column_stack([x, x**2]) if curved else x[:, None]
+            coefs.append(np.linalg.lstsq(basis, f, rcond=None)[0])
+        coefs = np.array(coefs)
+        a = (1 - level) / 2
+        out[method] = {"lo": np.quantile(coefs, a, axis=0), "hi": np.quantile(coefs, 1 - a, axis=0),
+                       "se": coefs.std(axis=0, ddof=1), "B": len(coefs), "level": level}
+    return out
+
+
+def _fl_marker(ax, value, y, ci, k, label):
+    """The Fed-2SRI point, with its bootstrap interval for parameter k when there is one."""
+    if ci is None:
+        ax.scatter([value], [y], marker="^", s=90, color=FED_COLOR, zorder=4, label=label and label + " (no CI)")
+        return
+    err = [[max(value - ci["lo"][k], 0.0)], [max(ci["hi"][k] - value, 0.0)]]
+    ax.errorbar([value], [y], xerr=err, fmt="^", color=FED_COLOR, ms=9, ecolor=FED_COLOR, elinewidth=3, zorder=4,
+                label=label and f"{label} (bootstrap {int(round(ci['level'] * 100))}% CI, B={ci['B']})")
+
+
 def _style(ax) -> None:
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
@@ -293,8 +333,11 @@ def _style(ax) -> None:
 
 
 def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
-                  avg_slope_target, shape, theta1, theta2, out: Path, fed2sls=None, rows=FAMILIES) -> None:
-    """Two columns, one per parameter of the quadratic basis. Rows: sites, then the selected families."""
+                  avg_slope_target, shape, theta1, theta2, out: Path, fed2sls=None, rows=FAMILIES,
+                  fl_ci_=None) -> None:
+    """Two columns, one per parameter of the quadratic basis. Rows: sites, then the selected families.
+    fl_ci_: fl_ci()'s bootstrap intervals for the Fed-2SRI row, when there are any."""
+    fl_ci_ = fl_ci_ or {}
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
     rows_y = family_positions(rows)
@@ -320,9 +363,9 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
                  style="italic")
     if "federated" in rows_y:
         if "2sri" in fl:
-            ax1.scatter([fl["2sri"][0]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4,
-                        label="federated: Fed-2SRI, FedAvg global model (no CI)")
-            ax2.scatter([fl["2sri"][1]], [rows_y["federated"]], marker="^", s=90, color=FED_COLOR, zorder=4)
+            _fl_marker(ax1, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0,
+                       "federated: Fed-2SRI, FedAvg global model")
+            _fl_marker(ax2, fl["2sri"][1], rows_y["federated"], fl_ci_.get("2sri"), 1, None)
         else:
             ax1.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax1.get_yaxis_transform(),
                      ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
@@ -420,19 +463,30 @@ def main() -> None:
               f"--method fed2sls (or scripts/federated_exact_mr.py --shape {a.shape} for the checked-in sets)")
     else:
         print(f"federated Fed-2SLS: " + "  ".join(f"{v:.3f}" for v in fed2sls if v is not None) + "   (exact, with CI)")
+    ci = fl_ci(a.sites.name, curved, root=a.fl_results)
     for method, coef in fl.items():
-        print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + "   (from curve, no CI)")
+        c = ci.get(method)
+        if c is None:
+            note = "from curve, no CI"
+        else:
+            # "se <values>;" is read by dashboard/runner.parse_federated_se
+            note = (f"from curve, bootstrap B={c['B']}: se " + "  ".join(f"{v:.3f}" for v in c["se"])
+                    + f"; {int(round(c['level'] * 100))}% CI "
+                    + "  ".join(f"[{lo:.3f}, {hi:.3f}]" for lo, hi in zip(c["lo"], c["hi"])))
+        print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + f"   ({note})")
     if "2sri" not in fl:
         print(f"no NVFlare 2SRI run at {a.fl_results / '2sri' / a.sites.name}")
     if curved:
         pooled_q, pooled_cov = quadratic_2sls(site_summary.raw)
         forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
-                      target, a.shape, manifest["theta1"], manifest["theta2"], png_out, fed2sls, rows=a.rows)
+                      target, a.shape, manifest["theta1"], manifest["theta2"], png_out, fed2sls, rows=a.rows,
+                      fl_ci_=ci)
         pse = np.sqrt(np.diag(pooled_cov))
         print(f"concatenated quadratic 2SLS:                  theta1 {pooled_q[0]:.3f} ({pse[0]:.3f})  "
               f"theta2 {pooled_q[1]:.3f} ({pse[1]:.3f})")
     else:
-        forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, a.shape, png_out, fed2sls, rows=a.rows)
+        forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, a.shape, png_out, fed2sls, rows=a.rows,
+               fl_ci_=ci)
 
     with pl.Config(tbl_rows=-1, float_precision=3):
         print(res)

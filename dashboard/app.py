@@ -294,7 +294,7 @@ def headline_metrics(summary: dict, federated: dict, models: list) -> None:
                "(benchmark only) · coral is the confounded estimate MR is there to beat.")
 
 
-def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFrame:
+def comparison_table(summary: dict, federated: dict, params: dict, federated_se: dict | None = None) -> pl.DataFrame:
     """One row per estimator, with what each is allowed to see.
 
     The point of the comparison is that the rows needing individual-level data
@@ -318,7 +318,9 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
                         v[2] if len(v) > 2 else None, v[1]))
     if "2sri" in models and "2sri" in federated:
         coef = federated["2sri"]
-        rows.append(row(runner.MODELS["2sri"], "model updates only", coef[0], coef[1] if len(coef) > 1 else None))
+        se = (federated_se or {}).get("2sri")          # bootstrap SE, when the step ran --bootstrap
+        rows.append(row(runner.MODELS["2sri"], "model updates only", coef[0], coef[1] if len(coef) > 1 else None,
+                        se[0] if se else None))
     if "pooled" in models:
         if curved and "pooled_quadratic" in summary:
             t1, se1, t2, _ = summary["pooled_quadratic"]
@@ -417,7 +419,7 @@ with tab_experiments:
                  "Fed-2SRI: site-local first stage, then a control-function network trained with FedAvg.",
         )
         federated_on = any(m in runner.FL_METHODS for m in run_params["models"])
-        c2, c3, c4 = st.columns([2, 1, 1])
+        c2, c3, c4, c5 = st.columns([2, 1, 1, 1])
         run_params["fl_engine"] = c2.selectbox(
             "Federated engine", ["local", "nvflare"], disabled=not federated_on,
             help="local reproduces the federation's arithmetic in-process in seconds; nvflare "
@@ -427,6 +429,12 @@ with tab_experiments:
             "Fed-2SRI rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"], disabled=not federated_on)
         run_params["fl_epochs"] = c4.number_input(
             "Fed-2SRI local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"], disabled=not federated_on)
+        run_params["fl_bootstrap"] = c5.number_input(
+            "Fed-2SRI bootstrap B", 0, 2000, runner.EXPERIMENT_DEFAULTS["fl_bootstrap"], step=50,
+            disabled="2sri" not in run_params["models"],
+            help="Confidence band for Fed-2SRI: each replicate, every site resamples its own rows, "
+                 "refits its first stage, and the federation retrains; the band is the pointwise "
+                 "95% percentile interval. About 1.5 min for 200 on the local engine. 0 = no band.")
 
         steps = runner.steps_for(run_params)
         st.subheader("Run the experiment chain")
@@ -444,6 +452,7 @@ with tab_experiments:
             log = (run_paths.logs / "summary_mr.log")
             summary = runner.parse_summary(log.read_text()) if log.exists() else {}
             federated = runner.parse_federated(log.read_text()) if log.exists() else {}
+            federated_se = runner.parse_federated_se(log.read_text()) if log.exists() else {}
 
             st.divider()
 
@@ -464,7 +473,7 @@ with tab_experiments:
             st.markdown("#### All estimators")
             st.caption("Every row targets the same causal curve; they differ in what "
                        "each one is allowed to see.")
-            st.dataframe(comparison_table(summary, federated, run_params),
+            st.dataframe(comparison_table(summary, federated, run_params, federated_se),
                          width="stretch", hide_index=True)
 
             st.divider()

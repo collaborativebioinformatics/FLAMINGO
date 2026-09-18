@@ -50,6 +50,7 @@ FED_DIR = os.path.join(REPO, "data", "simulated_data", "federated")
 sys.path.insert(0, os.path.join(HERE, "src"))
 from model import MLP, MRModel  # noqa: E402
 from tasks import detect_task, load_manifest  # noqa: E402
+import bootstrap  # noqa: E402
 import fed2sls_engine  # noqa: E402
 import local_engine  # noqa: E402
 import plots  # noqa: E402
@@ -240,7 +241,27 @@ def run_dataset(dataset, method, args):
     if secure.active:
         collect_secure_logs(metrics_dir, results_dir)
         summarize_secure(results_dir)
+    if args.bootstrap:
+        run_bootstrap(sites, data_dir, workspace, results_dir, method, args)
     plots.plot_dataset(dataset, method, root, data_dir, task)
+
+
+def run_bootstrap(sites, data_dir, workspace, results_dir, method, args):
+    """Percentile confidence band for the FedAvg curve from --bootstrap replicates (src/bootstrap.py)."""
+    import time
+    t0 = time.time()
+    print(f"\n=== Bootstrap: {args.bootstrap} replicates of the whole federated fit "
+          f"(sites resample their own rows, refit the first stage, retrain) ===", flush=True)
+    boot = bootstrap.run(sites, data_dir, os.path.join(workspace, "bootstrap"), method, args.rounds, args.epochs,
+                         args.lr, args.batch_size, args.seed, args.bootstrap, args.bootstrap_jobs)
+    bnd = bootstrap.write(results_dir, boot, args.ci_level,
+                          {"method": method, "seed": args.seed, "rounds": args.rounds, "epochs": args.epochs,
+                           "lr": args.lr, "point_estimate_engine": args.engine})
+    at = bnd.set_index(bnd.x.round(3))
+    edge = [x for x in (-2.0, 2.0) if x in at.index]
+    print(f"{int(args.ci_level * 100)}% pointwise band of f(x) - f(0): "
+          + "  ".join(f"x={x:+.0f}: [{at.lo[x]:.3f}, {at.hi[x]:.3f}]" for x in edge)
+          + f"   ({time.time() - t0:.0f} s)", flush=True)
 
 
 def summarize(df, task, epochs):
@@ -276,6 +297,10 @@ def run_parallel(pairs, args):
         passthrough.append(f"--results_root={args.results_root}")
     if args.threads:
         passthrough.append(f"--threads={args.threads}")
+    if args.bootstrap:
+        passthrough += [f"--bootstrap={args.bootstrap}", f"--ci_level={args.ci_level}"]
+        if args.bootstrap_jobs:
+            passthrough.append(f"--bootstrap_jobs={args.bootstrap_jobs}")
     if args.seed:
         passthrough.append(f"--seed={args.seed}")
     if args.secure_config:
@@ -343,8 +368,19 @@ def main():
                    help="fedsec YAML (configs/secure/); robust aggregation, attacks, dp, secagg. Default: all off")
     p.add_argument("--secure_set", action="append", metavar="SECTION.KEY=VALUE",
                    help="override one fedsec config key, e.g. dp.noise_multiplier=2 (repeatable)")
+    p.add_argument("--bootstrap", type=int, default=0, metavar="B",
+                   help="FedAvg methods: B bootstrap replicates for a confidence band on the curve "
+                        "(default 0 = off; see src/bootstrap.py)")
+    p.add_argument("--ci_level", type=float, default=0.95, help="bootstrap band level (default 0.95)")
+    p.add_argument("--bootstrap_jobs", type=int, default=None,
+                   help="replicates run in parallel (default: CPU count - 1)")
     args = p.parse_args()
     secure = load_secure(args)                  # fail on a bad config before any job starts
+    if args.bootstrap and secure.active:
+        raise SystemExit("--bootstrap is not implemented for --secure_config runs: the replicates would need "
+                         "the same attacks, dp noise and aggregation rule as the point estimate")
+    if not 0 < args.ci_level < 1:
+        raise SystemExit("--ci_level must be in (0, 1)")
 
     if args.all:
         datasets = sorted(d for d in os.listdir(args.fed_dir)
