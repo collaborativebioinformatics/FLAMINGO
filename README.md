@@ -44,6 +44,16 @@ uv run python job.py --all --method fed2sls
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
 Fed-2SLS is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
 
+# Pipeline
+
+![FLAMINGO pipeline: a shared causal model simulated across ten biobank sites, then three estimator families — per-SNP summary statistics, a pooled all-rows benchmark, and federated estimators (FedMR and NVFlare FedAvg) — compared on a forest plot for the linear model and a dose-response curve for the non-linear model](images/flamingo_pipeline.png)
+
+The diagram is generated: edit [images/make_pipeline_diagram.py](images/make_pipeline_diagram.py) and re-run it to rebuild the SVG and PNG.
+
+```bash
+uv run python images/make_pipeline_diagram.py
+```
+
 # Interactive dashboard
 
 To explore the whole pipeline without the command line — set the simulation
@@ -59,24 +69,14 @@ See [dashboard/README.md](dashboard/README.md).
 
 ![Dashborad screengrab](images/dashboard_screengrab.png)
 
-# Intro
-
-Biobanks make it possible to study the causes of disease at scale, but the most informative analyses often need individual-level data, which privacy concerns usually restrict. Federated learning (FL) works around this by keeping the data in place. FL trains a model locally at each site and shares only model parameters or gradients with a central server, which combines them into a global model and sends it back for further training rounds until it converges. Mendelian randomization (MR) is a statistical method that aims to test a causal hypothesis on observational data. Standard MR estimators such as inverse-variance weighted (IVW), MR-Egger and weighted median only need the per-variant effect estimates and standard errors for the exposure and the outcome, and these summary statistics are routinely shared. For linear models, fixed-effects meta-analysis of per-site estimates is as efficient as pooling the individual-level data. This argument holds only for linear models. Non-linear MR needs individual-level data and cannot be rebuilt from standard summary statistics. It estimates how the causal effect changes across the range of the exposure, tests of gene–environment interaction, and consistently adjusts covariates across sites. For these analyses, FL is a legitimate alternative to pooling data. Here we test whether a federated two-stage MR model can recover a non-linear causal dose–response curve across biobanks that cannot share data, and compare it with summary-statistic MR and with a fit on the pooled individual-level data.
-
-# Pipeline
-
-![FLAMINGO pipeline: a shared causal model simulated across ten biobank sites, then three estimator families — per-SNP summary statistics, a pooled all-rows benchmark, and federated estimators (FedMR and NVFlare FedAvg) — compared on a forest plot for the linear model and a dose-response curve for the non-linear model](images/flamingo_pipeline.png)
-
-The diagram is generated: edit [images/make_pipeline_diagram.py](images/make_pipeline_diagram.py) and re-run it to rebuild the SVG and PNG.
-
-```bash
-uv run python images/make_pipeline_diagram.py
-```
 
 # Results
 
 ![Primary result - linear model forest showing estimator results across sites and methods, and non-linear dose-response curve.](images/forest_and_dose_response.png)
 
+# Context
+
+Biobanks make it possible to study the causes of disease at scale, but the most informative analyses often need individual-level data, which privacy concerns usually restrict. Federated learning (FL) works around this by keeping the data in place. FL trains a model locally at each site and shares only model parameters or gradients with a central server, which combines them into a global model and sends it back for further training rounds until it converges. Mendelian randomization (MR) is a statistical method that aims to test a causal hypothesis on observational data. Standard MR estimators such as inverse-variance weighted (IVW), MR-Egger and weighted median only need the per-variant effect estimates and standard errors for the exposure and the outcome, and these summary statistics are routinely shared. For linear models, fixed-effects meta-analysis of per-site estimates is as efficient as pooling the individual-level data. This argument holds only for linear models. Non-linear MR needs individual-level data and cannot be rebuilt from standard summary statistics. It estimates how the causal effect changes across the range of the exposure, tests of gene–environment interaction, and consistently adjusts covariates across sites. For these analyses, FL is a legitimate alternative to pooling data. Here we test whether a federated two-stage MR model can recover a non-linear causal dose–response curve across biobanks that cannot share data, and compare it with summary-statistic MR and with a fit on the pooled individual-level data.
 
 
 # Further Reading
