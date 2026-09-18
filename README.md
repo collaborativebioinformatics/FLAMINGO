@@ -67,14 +67,14 @@ uv run streamlit run app.py
 
 See [dashboard/README.md](dashboard/README.md).
 
-[![Launch the dashboard (TODAY ONLY!)](https://img.shields.io/badge/Launch%20the%20dashboard-c2417a?style=for-the-badge&logo=streamlit&logoColor=white)](https://thinks-segments-beginners-identifies.trycloudflare.com)
+[![Launch the dashboard (TODAY ONLY!)](https://img.shields.io/badge/Launch%20the%20dashboard-c2417a?style=for-the-badge&logo=streamlit&logoColor=white)](https://overview-contacted-motivation-acquired.trycloudflare.com)
 
 ![Dashborad screengrab](images/dashboard_screengrab.png)
 
 
 # Results
 
-![Primary result - linear model forest showing estimator results across sites and methods, and non-linear dose-response curve.](images/forest_and_dose_response.png)
+![Primary result - linear model forest showing estimator results across sites and methods, and non-linear dose-response curve.](images/merged_linear_non-linear.png)
 
 # Context
 
