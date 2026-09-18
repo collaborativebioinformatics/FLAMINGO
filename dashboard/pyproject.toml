@@ -1,0 +1,16 @@
+[project]
+name = "team10-dashboard"
+version = "0.1.0"
+description = "Streamlit dashboard for the FLAMINGO simulation and Mendelian randomization chain"
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit>=1.49",
+    # the dashboard runs data/scripts/*.py with its own interpreter, so it
+    # carries the data/ dependencies; set FLAMINGO_DATA_PYTHON to use a
+    # separate environment instead
+    "lifelines>=0.30.3",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "polars>=1.44.2",
+    "pandas>=2.2",
+]

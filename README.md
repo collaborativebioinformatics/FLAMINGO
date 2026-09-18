@@ -36,6 +36,19 @@ uv run python job.py --dataset quadratic
 
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
 
+# Interactive dashboard
+
+To explore the same pipeline without the command line — set the simulation
+parameters, generate a federation and run the MR chain over it:
+
+```bash
+cd dashboard
+uv sync
+uv run streamlit run app.py
+```
+
+See [dashboard/README.md](dashboard/README.md).
+
 
 # Intro
 

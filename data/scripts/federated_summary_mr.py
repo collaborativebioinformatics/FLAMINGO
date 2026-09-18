@@ -210,9 +210,9 @@ def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, targ
     fig.savefig(out)
 
 
-def fl_curve(method: str, dataset: str):
+def fl_curve(method: str, dataset: str, root: Path = FL_RESULTS):
     """Last-round global-model curve f(x) from the NVFlare run, or None if that run is missing."""
-    path = FL_RESULTS / method / dataset / "curves.csv"
+    path = root / method / dataset / "curves.csv"
     if not path.exists():
         return None
     df = pl.read_csv(path)
@@ -221,12 +221,12 @@ def fl_curve(method: str, dataset: str):
     return c["x"].to_numpy(), c["f"].to_numpy()
 
 
-def fl_params(dataset: str, curved: bool, x_max: float = 2.0):
+def fl_params(dataset: str, curved: bool, x_max: float = 2.0, root: Path = FL_RESULTS):
     """Summarise the federated curves into the forest's parameters by least squares on |x| <= x_max.
     Returns {"2sri": (theta1, theta2) or (slope,), "naive": ...} for the runs that exist."""
     out = {}
     for method in ("2sri", "naive"):
-        c = fl_curve(method, dataset)
+        c = fl_curve(method, dataset, root)
         if c is None:
             continue
         x, f = c
@@ -325,6 +325,9 @@ def main():
     p.add_argument("--shape", choices=["linear", "quadratic", "threshold", "cox"], default="linear")
     p.add_argument("--sites", type=Path, default=None, help="default simulated_data/federated/<shape>")
     p.add_argument("--out", type=Path, default=None, help="output stem; default results/sumstats.<shape>")
+    p.add_argument("--fl-results", type=Path, default=FL_RESULTS,
+                   help="results/ root of the NVFlare runs, matching federated_nonlinear_mr.py --federated; "
+                        "point it at an empty directory to plot the summary-statistics results alone")
     a = p.parse_args()
     a.sites = a.sites or Path("simulated_data/federated") / a.shape
     a.out = a.out or Path("results") / f"sumstats.{a.shape}"
@@ -355,11 +358,11 @@ def main():
     a.out.parent.mkdir(parents=True, exist_ok=True)
     csv_out, png_out = Path(f"{a.out}.csv"), Path(f"{a.out}.png")
     res.write_csv(csv_out)
-    fl = fl_params(a.sites.name, curved)
+    fl = fl_params(a.sites.name, curved, root=a.fl_results)
     for method, coef in fl.items():
         print(f"federated NVFlare {method:5s}: " + "  ".join(f"{v:.3f}" for v in coef) + "   (from curve, no CI)")
     if "2sri" not in fl:
-        print(f"no NVFlare 2SRI run at {FL_RESULTS / '2sri' / a.sites.name}")
+        print(f"no NVFlare 2SRI run at {a.fl_results / '2sri' / a.sites.name}")
     if curved:
         model_meta, model_cov = multivariate_meta(*zip(*site_summary.models))
         pooled_q, pooled_cov = quadratic_2sls(site_summary.raw)
