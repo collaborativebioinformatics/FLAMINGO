@@ -10,7 +10,7 @@ fit, to machine precision, with its standard errors. Nothing is trained.
 
 Code: the `flamingo_fedmr` package in `../../fedmr/` (numpy only), the
 driver `scripts/federated_exact_mr.py`, the NVFlare transport
-`../../federated_learning/fedmr_job.py`, the seed sweep
+(`--method fedmr` of `../../federated_learning/job.py`), the seed sweep
 `scripts/fedmr_sweep.py`, and the tests `tests/test_fedmr.py`. Run from
 `data/`:
 
@@ -18,7 +18,7 @@ driver `scripts/federated_exact_mr.py`, the NVFlare transport
 uv run python scripts/federated_exact_mr.py --all          # every continuous set
 uv run pytest -q                                           # identity tests
 uv run python scripts/fedmr_sweep.py --seeds 100           # ~15 min
-cd ../federated_learning && uv run python fedmr_job.py --all   # the real federation
+cd ../federated_learning && uv run python job.py --all --method fedmr   # the real federation
 ```
 
 ## The estimator
@@ -123,15 +123,17 @@ to 1e-15.
 
 ## The real federation
 
-`../../federated_learning/fedmr_job.py` runs the protocol in the NVFlare
-simulator: one client per site (`src/fedmr_client.py`), a server workflow
-that sums and solves (`src/fedmr_controller.py`, a `ModelController` that
-never averages), two rounds. After the job it re-runs the package
-in-process on the same files and the pooled reference in numpy, and fails
-if they disagree by more than 1e-10. On every continuous set the three
-agree to 1e-16 in the estimate and the robust SE
-(`../../federated_learning/results/fedmr/summary.csv`). The quadratic basis
-runs the same way (`--basis quadratic`).
+`job.py --method fedmr` in `../../federated_learning/` runs the protocol in
+the NVFlare simulator: one client per site (`src/fedmr_client.py`), a
+server workflow that sums and solves (`src/fedmr_controller.py`, a
+`ModelController` that never averages), two rounds. After the job it
+re-runs the package in-process on the same files and the pooled reference
+in numpy, and fails if they disagree by more than 1e-10. On every
+continuous set the three agree to 1e-16 in the estimate and the robust SE
+(`../../federated_learning/results/fedmr/<dataset>/metrics.csv`). The
+quadratic basis runs the same way (`--fedmr_basis quadratic`), and the
+result is drawn with its analytic band on the same fitted-curve plots as
+the FedAvg methods.
 
 ## What is, and is not, protected
 

@@ -9,8 +9,12 @@ Methods (src/model.py):
   2sri   site-local OLS first stage X ~ SNPs, then federated outcome ~ f(X) + h(X - X_hat);
          f is the causal curve, h the control function (default)
   2sps   site-local first stage, then federated outcome ~ f(X_hat)
+  fedmr  exact federated 2SLS from summed sufficient statistics (src/fedmr_engine.py):
+         no training, two rounds, equals the pooled fit; continuous outcomes only
 The first stage stays local because every simulated site has its own SNP
-effects and allele frequencies, so there is no shared instrument to learn.
+effects and allele frequencies, so there is no shared instrument to learn
+(fedmr switches to its shared-instrument protocol when the manifest says
+the SNPs are shared).
 
 One simulated client per site CSV in data/simulated_data/federated/<dataset>/.
 The outcome family is detected from the data (src/tasks.py). Each run prints
@@ -46,6 +50,7 @@ FED_DIR = os.path.join(REPO, "data", "simulated_data", "federated")
 sys.path.insert(0, os.path.join(HERE, "src"))
 from model import MLP, MRModel  # noqa: E402
 from tasks import detect_task, load_manifest  # noqa: E402
+import fedmr_engine  # noqa: E402
 import local_engine  # noqa: E402
 import plots  # noqa: E402
 
@@ -162,8 +167,30 @@ def run_dataset(dataset, method, args):
     if not sites:
         raise SystemExit(f"no site*.csv files in {data_dir}")
     head = pd.read_csv(os.path.join(data_dir, f"{sites[0]}.csv"), nrows=2000)
-    task = detect_task(head, load_manifest(data_dir))
+    manifest = load_manifest(data_dir)
+    task = detect_task(head, manifest)
     secure = load_secure(args)
+    if method == "fedmr":
+        if secure.active:
+            raise SystemExit("fedmr sends sufficient statistics, not model updates: the fedsec components "
+                             "(robust aggregation, dp, secagg, attacks) do not apply. Run it without --secure_config.")
+        reason = None
+        if task.name != "continuous":
+            reason = "FedMR is linear 2SLS on a continuous Y"
+        else:
+            reason = fedmr_engine.supported(manifest, args.fedmr_basis, args.fedmr_crossfit)
+        if reason:
+            print(f"\n##### {dataset} / fedmr: skipped, {reason} #####\n", flush=True)
+            return
+        print(f"\n##### {dataset} / fedmr ({args.engine}): task={task.name}, {len(sites)} sites, "
+              f"basis={args.fedmr_basis}, crossfit={args.fedmr_crossfit} #####\n", flush=True)
+        workspace = os.path.join(args.workspace, method, dataset)
+        shutil.rmtree(workspace, ignore_errors=True)
+        root = results_root(secure)
+        fedmr_engine.run(dataset, data_dir, os.path.join(root, method, dataset), workspace, args.engine,
+                         args.fedmr_basis, args.fedmr_crossfit, args.seed, simulator_run, args.task_interval)
+        plots.plot_dataset(dataset, method, root, data_dir, task)
+        return
     print(f"\n##### {dataset} / {method} ({args.engine}): task={task.name}, {len(sites)} sites, "
           f"{args.rounds} rounds x {args.epochs} local epochs"
           f"{f', secure config {secure.name}' if secure.active else ''} #####\n", flush=True)
@@ -242,7 +269,8 @@ def run_parallel(pairs, args):
     os.makedirs(log_dir, exist_ok=True)
     passthrough = [f"--rounds={args.rounds}", f"--epochs={args.epochs}", f"--lr={args.lr}",
                    f"--batch_size={args.batch_size}", f"--workspace={args.workspace}", f"--engine={args.engine}",
-                   f"--task_interval={args.task_interval}"]
+                   f"--task_interval={args.task_interval}", f"--fedmr_basis={args.fedmr_basis}",
+                   f"--fedmr_crossfit={args.fedmr_crossfit}"]
     if args.threads:
         passthrough.append(f"--threads={args.threads}")
     if args.seed:
@@ -274,7 +302,7 @@ def run_parallel(pairs, args):
                     failed.append((dataset, method))
                     print(f"\n##### {dataset} / {method}: FAILED (exit {rc}), see {log}\n" + text[-2000:], flush=True)
                     continue
-                start = text.find("=== Round")
+                start = max(text.find("=== Round"), text.find("FedMR fit"))
                 print(f"\n##### {dataset} / {method}: done #####\n" + (text[start:] if start >= 0 else ""), flush=True)
     if failed:
         raise SystemExit(f"{len(failed)} job(s) failed: {failed}")
@@ -284,8 +312,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", action="append", help="subfolder of data/simulated_data/federated/ (repeatable)")
     p.add_argument("--all", action="store_true", help="run every dataset under federated/")
-    p.add_argument("--method", action="append", choices=["naive", "2sri", "2sps"],
+    p.add_argument("--method", action="append", choices=["naive", "2sri", "2sps", "fedmr"],
                    help="repeatable; default 2sri")
+    p.add_argument("--fedmr_basis", choices=["linear", "quadratic"], default="linear",
+                   help="fedmr: structural basis, [X] or [X, X^2] (default linear)")
+    p.add_argument("--fedmr_crossfit", type=int, default=0,
+                   help="fedmr: k-fold cross-fitted instrument, site-local first stages only (default 0 = off)")
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--epochs", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-2)

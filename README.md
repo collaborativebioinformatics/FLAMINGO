@@ -38,7 +38,7 @@ uv sync
 uv run python job.py --dataset quadratic
 
 # 7. FedMR through NVFlare: two rounds, no training, checked against the pooled fit
-uv run python fedmr_job.py --all
+uv run python job.py --all --method fedmr
 ```
 
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.

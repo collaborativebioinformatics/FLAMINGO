@@ -14,6 +14,7 @@ the SNPs as instruments.
 | `naive` | `outcome ~ f(X)` | `E[outcome | X]`: the association, confounded by `U` |
 | `2sri` (default) | `outcome ~ f(X) + c (X - X_hat)` | the causal curve; the first-stage residual is a control function that carries the confounder |
 | `2sps` | `outcome ~ f(X_hat)` | the causal curve over the range of `X_hat` (predictor substitution) |
+| `fedmr` | exact 2SLS from summed sufficient statistics, no training (see below) | the slope `theta` of `Y ~ theta X` (or `[X, X^2]`), with analytic SEs; continuous outcomes only |
 
 `X_hat` comes from a **site-local** first stage, ordinary least squares of X on
 the 20 SNPs on the site's training split. It has to be local: every simulated
@@ -46,16 +47,16 @@ approximations on the logit and log-hazard scales.
 
 | File | What |
 |---|---|
-| `job.py` | Builds the `FedAvgJob`, attaches `src/client.py` to every site, runs the chosen engine, prints per-round tables, writes results and plots |
+| `job.py` | Builds the `FedAvgJob` (or the FedMR job for `--method fedmr`), attaches the client script to every site, runs the chosen engine, prints per-round tables, writes results and plots |
 | `src/model.py` | `MLP` (naive) and `MRModel` (2sri / 2sps second stage). Output is predicted Y, a logit, or a log relative hazard |
 | `src/tasks.py` | The three outcome families: targets, loss (Cox partial likelihood with Breslow ties), metrics, and the true causal curve from the manifest |
 | `src/fedsite.py` | One site: 80/20 split, local first stage, local training, evaluation, fitted-curve recording. Shared by both engines |
 | `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
 | `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
 | `src/plots.py` | Per-run metric and fitted-curve plots plus the all-datasets overview |
-| `fedmr_job.py`, `src/fedmr_controller.py`, `src/fedmr_client.py` | FedMR through NVFlare: sufficient-statistics client, summing server workflow, identity check against the in-process and pooled fits |
-| `results/fedmr/<dataset>/estimates.<basis>.json`, `results/fedmr/summary.csv` | FedMR estimates, SEs, robust SEs, diagnostics, and the identity-check differences |
-| `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` |
+| `src/fedmr_engine.py`, `src/fedmr_controller.py`, `src/fedmr_client.py` | The `fedmr` method: sufficient-statistics client, summing server workflow, in-process engine, identity checks against the in-process and pooled fits, curve and metrics files |
+| `results/fedmr/<dataset>/estimates.<basis>[.cf<k>].json` | FedMR full result: estimates, SEs, robust SEs, first-stage diagnostics, rank and conditioning |
+| `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` (for `fedmr`: one metrics row with the estimate, SEs, F and identity-check gaps; the curve carries its 95% band; no per-round plots) |
 | `results/fitted_curves_all.png`, `results/summary.csv` | Overview across datasets and methods |
 | `workspace/` | Simulator output and per-job logs (git-ignored) |
 
@@ -65,34 +66,43 @@ approximations on the logit and log-hazard scales.
 uv sync                                        # nvflare, torch (CPU), pandas, scikit-learn, lifelines, matplotlib
 uv run python job.py --dataset quadratic       # 2SRI on one dataset in the NVFlare simulator (~30 s)
 uv run python job.py --all --method naive --method 2sri --method 2sps --engine local --jobs 6   # full sweep, ~1 min
+uv run python job.py --all --method fedmr           # exact federated 2SLS on every continuous set (~40 s each)
 uv run python job.py --dataset cox --method 2sps --rounds 10 --epochs 3 --lr 0.005
 uv run python src/plots.py                     # re-render every plot from results/ without training
 ```
 
 ## FedMR: the exact federated 2SLS, no training
 
-`fedmr_job.py` runs a different kind of federation on the same files: each
+`--method fedmr` runs a different kind of federation on the same files: each
 client computes the sufficient statistics of a two-stage least squares MR
 (`flamingo_fedmr`, in `../fedmr/`), the server (`src/fedmr_controller.py`,
 a `ModelController` that sums rather than averages) adds them and solves,
 and a second round collects the robust-covariance term. Two rounds, no
 epochs, and the result equals the pooled 2SLS to machine precision, with
-standard errors. Only continuous outcomes.
+standard errors. Only continuous outcomes; binary and survival sets are
+skipped, and the fedsec configs are refused because there are no model
+updates for them to act on. The protocol follows the manifest: site-local
+first stages by default, the shared-instrument protocol when `shared_snps`
+is set (linear basis only through NVFlare).
 
 ```bash
-uv run python fedmr_job.py --dataset linear                 # local first stage, 2 rounds
-uv run python fedmr_job.py --dataset linear_shared          # shared SNPs across sites
-uv run python fedmr_job.py --dataset quadratic --basis quadratic
-uv run python fedmr_job.py --all
+uv run python job.py --dataset linear --method fedmr                    # local first stage, 2 rounds
+uv run python job.py --dataset linear_shared --method fedmr             # shared SNPs across sites
+uv run python job.py --dataset quadratic --method fedmr --fedmr_basis quadratic
+uv run python job.py --dataset linear --method fedmr --fedmr_crossfit 5
+uv run python job.py --all --method fedmr --engine local                # same arithmetic in-process
 ```
 
-After each job the script re-runs the protocol in-process on the same
-files and the pooled fit in numpy, and fails unless all three agree to
-1e-10. `results/fedmr/summary.csv` has the estimates; on every set the
-observed differences are at 1e-16. The FedAvg 2SRI model above and FedMR
-answer different questions (a flexible curve without an analytic CI versus
-a specified basis with one), and the forest plots in `../data/results/`
-keep both rows. See `../data/docs/federated-exact-mr.md`.
+`--engine nvflare` runs the protocol in-process afterwards on the same
+files and, for site-specific SNPs, the pooled fit in numpy, and fails
+unless all three agree to 1e-10; the observed gaps are recorded in
+`results/fedmr/<dataset>/metrics.csv` and sit at 1e-16 on every set. The
+`fedmr` row lands on the same fitted-curve and overview plots as the FedAvg
+methods, drawn with its analytic 95% band, and in `results/summary.csv` as
+`theta_X`, `se_X`, `robust_se_X` and `first_stage_F`. The FedAvg 2SRI model
+above and FedMR answer different questions (a flexible curve without an
+analytic CI versus a specified basis with one), and the forest plots in
+`../data/results/` keep both rows. See `../data/docs/federated-exact-mr.md`.
 
 ## Engines and speed
 

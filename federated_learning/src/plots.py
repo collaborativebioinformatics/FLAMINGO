@@ -32,6 +32,7 @@ METHOD_STYLE = {                     # fixed colour per method, never cycled
     "naive": dict(color=BLUE, label="federated naive: f(X)"),
     "2sri": dict(color="#4a3aa7", label="federated MR 2SRI: f(X) with control function"),
     "2sps": dict(color="#1baf7a", label="federated MR 2SPS: f(X_hat)"),
+    "fedmr": dict(color="#8a2be2", label="federated MR FedMR: exact 2SLS, 95% band"),
 }
 METHODS = list(METHOD_STYLE)
 
@@ -51,6 +52,18 @@ def last_curve(curves):
     x, f = c.index.to_numpy(), c.to_numpy()
     f = f - np.interp(0.0, x, f)                 # anchor at X = 0, like the true curve
     return x, f, int(last)
+
+
+def last_band(curves):
+    """(x, f_lo, f_hi) of the last round, anchored like last_curve, or None when the run
+    carries no analytic band (the FedAvg methods)."""
+    if not {"f_lo", "f_hi"} <= set(curves.columns):
+        return None
+    last = curves["round"].max()
+    c = curves[curves["round"] == last].groupby("x")[["f", "f_lo", "f_hi"]].mean().sort_index()
+    x = c.index.to_numpy()
+    f0 = np.interp(0.0, x, c.f.to_numpy())
+    return x, c.f_lo.to_numpy() - f0, c.f_hi.to_numpy() - f0
 
 
 def _logit(p):
@@ -134,6 +147,12 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
                     label=f'{st["label"]}, round {last} (solid: |X| <= 2 sd of X_hat = {lim:.1f})')
             ax.plot(x, f, color=st["color"], lw=1.0, ls=":", zorder=3)
             continue
+        if method == "fedmr":
+            band = last_band(curves)
+            if band is not None:
+                ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=0.15, lw=0, zorder=2)
+            ax.plot(x, f, color=st["color"], lw=2.0, ls=(0, (4, 2)), zorder=4, label=st["label"])
+            continue
         ax.plot(x, f, color=st["color"], lw=2.4, zorder=4, label=f'{st["label"]}, round {last}')
     tc = true_curve(manifest, x_ref)
     if tc is not None:
@@ -161,8 +180,10 @@ def plot_dataset(dataset, method, results_root, data_dir, task=None):
         task = detect_task(pd.read_csv(os.path.join(data_dir, "site01.csv"), nrows=2000), manifest)
     results_dir = os.path.join(results_root, method, dataset)
     metrics, curves = _load(results_root, method, dataset)
-    for stage in ("global", "local"):
-        plot_metrics(metrics, task, stage, os.path.join(results_dir, f"metrics_by_round.{stage}.png"), dataset, method)
+    if method != "fedmr":       # fedmr has no per-round test metrics: it is one closed-form solve
+        for stage in ("global", "local"):
+            plot_metrics(metrics, task, stage, os.path.join(results_dir, f"metrics_by_round.{stage}.png"),
+                         dataset, method)
 
     method_runs = {method: (metrics, curves)}
     if method != "naive" and _load(results_root, "naive", dataset):
@@ -199,6 +220,11 @@ def plot_overview(datasets, results_root, fed_dir, out):
                 continue
             metrics, curves = loaded
             method_runs[method] = loaded
+            if method == "fedmr":
+                r = metrics.iloc[-1]
+                rows.append({"dataset": ds, "method": method, "task": task.name, "round": int(r["round"]),
+                             **{k: r[k] for k in ("theta_X", "se_X", "robust_se_X", "first_stage_F") if k in r}})
+                continue
             g = metrics[(metrics["round"] == metrics["round"].max()) & (metrics.stage == "global")]
             w = g.n_test
             score = {m: (g[m] * w).sum() / w.sum() for m in task.metrics if m not in ("loss", "events")}
@@ -212,10 +238,10 @@ def plot_overview(datasets, results_root, fed_dir, out):
             handles.setdefault(l.split(", round")[0].split(" (solid")[0], h)
     fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="upper right", ncol=2,
                bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("Federated X -> outcome curve: naive vs MR", x=0.01, ha="left",
+    fig.suptitle("Federated X -> outcome curve: naive vs MR (FedAvg and FedMR)", x=0.01, ha="left",
                  fontsize=12, color=INK, fontweight="bold")
-    fig.text(0.01, 0.94, NOTE, fontsize=8, color=MUTED)
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    fig.text(0.01, 0.925, NOTE, fontsize=8, color=MUTED)
+    fig.tight_layout(rect=(0, 0, 1, 0.905))
     fig.savefig(out, dpi=150, facecolor=SURFACE)
     plt.close(fig)
     summary = pd.DataFrame(rows)

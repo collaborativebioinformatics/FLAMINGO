@@ -143,7 +143,7 @@ ol.refs{padding-left:1.6rem;font-size:.9rem}ol.refs li{margin-bottom:.5rem}
 <tr><td><code>data/scripts/federated_exact_mr.py</code></td><td>Runs FedMR on every continuous set and compares it with the concatenated, site-meta and sumstats estimators; writes <code>results/fedmr.&lt;shape&gt;.csv</code>.</td></tr>
 <tr><td><code>federated_summary_mr.py</code>, <code>federated_nonlinear_mr.py</code></td><td>The forest plots gain a <code>federated: FedMR</code> row with a confidence interval, kept alongside the FedAvg row; the dose-response plot draws the FedMR quadratic curve over the concatenated one.</td></tr>
 <tr><td><code>data/scripts/heterogeneity.py</code>, both federated generators</td><td>Shared SNP panels with realized per-site heritability, allele-frequency shifts, site-specific causal effects and pleiotropy. Default output is bit-for-bit unchanged. New checked-in set <code>federated/linear_shared</code>.</td></tr>
-<tr><td><code>federated_learning/fedmr_job.py</code> and <code>src/fedmr_*.py</code></td><td>FedMR through NVFlare <a class="cite" href="#refs">[13]</a>: a client that computes its statistics and a server workflow that sums and solves in two rounds. After each job the script re-runs the package in-process and the pooled fit in numpy and fails unless all three agree to 1e-10.</td></tr>
+<tr><td><code>federated_learning/job.py --method fedmr</code> and <code>src/fedmr_*.py</code></td><td>FedMR through NVFlare <a class="cite" href="#refs">[13]</a>: a client that computes its statistics and a server workflow that sums and solves in two rounds. After each job the script re-runs the package in-process and the pooled fit in numpy and fails unless all three agree to 1e-10.</td></tr>
 <tr><td><code>data/scripts/fedmr_sweep.py</code></td><td>Seed sweep over sites, instrument strength, SNP count, imbalance, allele frequencies, effect heterogeneity and pleiotropy.</td></tr>
 <tr><td>docs</td><td><code>data/docs/federated-exact-mr.md</code> (the method, results and disclosure discussion), <code>data/docs/fedmr-plan.md</code> (the plan with both review rounds), README quick-start steps, both project READMEs, <code>writing/methods.md</code> and <code>writing/results.md</code>.</td></tr>
 </table></div>
@@ -195,9 +195,9 @@ uv run python scripts/fedmr_sweep.py --seeds 100       # about 15 minutes
 
 cd ../federated_learning
 uv sync
-uv run python fedmr_job.py --all                       # the federation through NVFlare
-uv run python fedmr_job.py --dataset quadratic --basis quadratic
-uv run python fedmr_job.py --dataset linear --crossfit 5</code></pre>
+uv run python job.py --all --method fedmr              # the federation through NVFlare
+uv run python job.py --dataset quadratic --method fedmr --fedmr_basis quadratic
+uv run python job.py --dataset linear --method fedmr --fedmr_crossfit 5</code></pre>
 
 <h2 id="reviews">Review history</h2>
 <p>Three reviews shaped the branch, and the plan document records them rather than erasing the earlier drafts.</p>

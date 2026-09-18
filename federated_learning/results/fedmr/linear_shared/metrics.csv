@@ -1,0 +1,2 @@
+site,round,stage,n_train,n_test,protocol,basis,crossfit,N,theta_X,se_X,robust_se_X,first_stage_F,partial_r2,max_diff_vs_inprocess,max_diff_robust_se_vs_inprocess
+all,2,global,55182,0,shared,linear,0,55182,0.30618240182823103,0.014181457921758293,0.01416589413508061,301.1349871122497,0.09845082636484015,5.551115123125783e-17,3.469446951953614e-18

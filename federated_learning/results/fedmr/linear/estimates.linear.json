@@ -1,21 +1,22 @@
 {
  "sites": [
   "site02",
-  "site01",
-  "site08",
-  "site05",
-  "site04",
   "site03",
+  "site04",
   "site07",
+  "site05",
   "site06",
-  "site09",
-  "site10"
+  "site01",
+  "site10",
+  "site08",
+  "site09"
  ],
  "rounds": 2,
  "spec": {
   "protocol": "local",
   "basis": "linear",
-  "crossfit": 0
+  "crossfit": 0,
+  "seed": 0
  },
  "w_names": [
   "X"
@@ -30,8 +31,8 @@
   0.014499741390462312
  ],
  "N": 55182,
- "rss": 60751.15669449428,
- "sigma2": 1.101142931875338,
+ "rss": 60751.15669449427,
+ "sigma2": 1.1011429318753378,
  "df_resid": 55171,
  "diagnostics": {
   "rank_A": 1,
@@ -48,7 +49,7 @@
     "partial_r2": 0.0944266556550661,
     "df1": 200.0,
     "df2": 54972.0,
-    "conditional": 1.0,
+    "conditional": true,
     "source": "local SNP first stages",
     "generated_instrument_F": 5752.833883283234
    }

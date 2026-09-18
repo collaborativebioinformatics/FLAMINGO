@@ -130,7 +130,8 @@ NVFlare client and the analysis scripts run the same arithmetic.
    (`--shared-snps`, `--maf-shift`, `--theta-sd`, `--pleiotropy-mean/sd`),
    manifest records `shared_snps`, shared MAF/beta, effect-allele note and
    per-site realized `h2_x`; `federated/linear_shared` checked in.
-6. **NVFlare transport** (`federated_learning/fedmr_job.py`): transport the
+6. **NVFlare transport** (`--method fedmr` of `federated_learning/job.py`,
+   `src/fedmr_engine.py`; formerly a separate `fedmr_job.py`): transport the
    tested statistics through a one-round (plus robust round) controller
    that sums, and assert equality with the in-process run. No secure
    aggregation claims.
