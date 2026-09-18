@@ -15,32 +15,38 @@ import flamingo_fedmr as fm
 from flamingo_fedmr import protocols as P
 
 
-def build_design(site, spec):
+def build_design(site, spec, site_index):
     """The site-local part of the chosen protocol. The shared-instrument quadratic and
-    cross-fit variants need a global first stage and are not wired through NVFlare here."""
+    cross-fit variants need a global first stage and are not wired through NVFlare here.
+    Cross-fit folds use seed + site_index, exactly as LocalFirstStageFedMR.run does."""
     basis, k = spec["basis"], int(spec.get("crossfit", 0))
     if spec["protocol"] == "shared":
         if basis != "linear" or k:
             raise SystemExit("NVFlare transport implements SharedInstrument with basis=linear, no cross-fit")
         return P.design_shared(site)
-    xhat = P.crossfit_xhat_local(site, P.fold_ids(site.n, k, 0), k) if k else P.local_first_stage(site)
+    if k:
+        xhat = P.crossfit_xhat_local(site, P.fold_ids(site.n, k, int(spec.get("seed", 0)) + site_index), k)
+    else:
+        xhat = P.local_first_stage(site)
     return P.design_generated(site, xhat, basis, P.local_first_stage_diagnostics(site))
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--data_dir", required=True)
+    p.add_argument("--sites", required=True, help="comma-separated site names in the order the job uses")
     args = p.parse_args()
 
     flare.init()
     name = flare.get_site_name()
+    site_index = args.sites.split(",").index(name)
     site = fm.load_site_csv(os.path.join(args.data_dir, f"{name}.csv"), name=name)
     design = None
     while flare.is_running():
         m = flare.receive()
         task = m.meta.get("task")
         if design is None:
-            design = build_design(site, m.meta)
+            design = build_design(site, m.meta, site_index)
             print(f"[{name}] n={site.n} design Z{design.Z.shape} W{design.W.shape}", flush=True)
         if task == "stats":
             st = fm.site_stats(design)

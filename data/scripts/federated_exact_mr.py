@@ -173,7 +173,7 @@ def analyse(shape: str, crossfit: int, out_dir: Path) -> pl.DataFrame:
     with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4, tbl_width_chars=200, fmt_str_lengths=40):
         print(df.drop("what_leaves_site"))
     print(f"identity check |FedMR - concatenated| = {abs(res['X'] - pooled):.2e}"
-          + (f", quadratic {d:.2e}" if curved else ""))
+          + (f", quadratic {d:.2e}" if curved and not shared else ""))
     print(f"wrote {out}")
     return df
 

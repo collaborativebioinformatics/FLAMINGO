@@ -71,15 +71,20 @@ def run_dataset(dataset, args):
         return None
     sites = sorted(os.path.basename(f)[:-4] for f in glob.glob(os.path.join(data_dir, "site*.csv")))
     protocol = "shared" if manifest.get("shared_snps") else "local"
-    out_path = os.path.join(HERE, "results", "fedmr", dataset, f"estimates.{args.basis}.json")
+    if protocol == "shared" and (args.basis != "linear" or args.crossfit):
+        print(f"skip {dataset}: the NVFlare transport runs the shared protocol with basis=linear and no cross-fit",
+              flush=True)
+        return None
+    tag = f"{args.basis}" + (f".cf{args.crossfit}" if args.crossfit else "")
+    out_path = os.path.join(HERE, "results", "fedmr", dataset, f"estimates.{tag}.json")
     print(f"\n##### FedMR / {dataset}: protocol={protocol}, basis={args.basis}, {len(sites)} clients #####\n", flush=True)
 
     job = FedJob(name=f"fedmr_{dataset}_{args.basis}", min_clients=len(sites))
     job.to_server(FedMRController(protocol=protocol, basis=args.basis, crossfit=args.crossfit, robust=True,
                                   out_path=out_path))
     # framework NUMPY: the default PyTorch converters expect tensors and drop plain numpy payloads
-    runner = ScriptRunner(script=os.path.join(HERE, "src", "fedmr_client.py"), script_args=f"--data_dir {data_dir}",
-                          framework=FrameworkType.NUMPY)
+    runner = ScriptRunner(script=os.path.join(HERE, "src", "fedmr_client.py"),
+                          script_args=f"--data_dir {data_dir} --sites {','.join(sites)}", framework=FrameworkType.NUMPY)
     for site in sites:
         job.to(runner, site)
     workspace = os.path.join(args.workspace, "fedmr", dataset)
@@ -95,7 +100,8 @@ def run_dataset(dataset, args):
     local = Proto(basis=args.basis, crossfit=args.crossfit, robust=True).run(data).result
     d_local = max(abs(nv_theta[n] - local[n]) for n in local.w_names)
     d_rse = max(abs(nv_rse[n] - local.se(n, True)) for n in local.w_names)
-    line = {"dataset": dataset, "protocol": protocol, "basis": args.basis, "rounds": nv["rounds"], "N": nv["N"],
+    line = {"dataset": dataset, "protocol": protocol, "basis": args.basis, "crossfit": args.crossfit,
+            "rounds": nv["rounds"], "N": nv["N"],
             **{f"{n}": nv_theta[n] for n in local.w_names}, **{f"se_{n}": nv["se"][i] for i, n in enumerate(local.w_names)},
             **{f"robust_se_{n}": nv_rse[n] for n in local.w_names},
             "max_diff_vs_inprocess": d_local, "max_diff_robust_se_vs_inprocess": d_rse}
@@ -135,7 +141,9 @@ def main():
     new = pd.DataFrame(lines)
     if os.path.exists(summary_path):
         old = pd.read_csv(summary_path)
-        old = old[~(old.dataset.isin(new.dataset) & (old.basis == args.basis))]
+        if "crossfit" not in old.columns:
+            old["crossfit"] = 0
+        old = old[~(old.dataset.isin(new.dataset) & (old.basis == args.basis) & (old.crossfit == args.crossfit))]
         new = pd.concat([old, new], ignore_index=True)
     new.to_csv(summary_path, index=False)
     pd.set_option("display.width", 200)

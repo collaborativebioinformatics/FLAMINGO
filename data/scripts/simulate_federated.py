@@ -27,17 +27,20 @@ from simulate_federated_sites import sample_site_params  # noqa: E402
 from simulators import make_simulator  # noqa: E402
 
 
-def run_federated(sim_fns, n_sites, n_snps, pop_min, pop_max,
-                   h2x_mean, h2x_kappa, gamma_mean, gamma_kappa, seed, out_dir, het=None) -> list:
-    """sim_fns: one simulator closure per site (they differ only when theta1 is site-specific).
-    het: a Heterogeneity (shared SNPs, site-specific theta1, pleiotropy) or None for the
-    default independent-SNP draw. Returns the manifest rows."""
-    if len(sim_fns) != n_sites:
-        raise ValueError(f"need one simulator per site: got {len(sim_fns)} for {n_sites} sites")
+def run_federated(make_sim, n_sites, n_snps, pop_min, pop_max,
+                   h2x_mean, h2x_kappa, gamma_mean, gamma_kappa, seed, out_dir, het_args=None) -> tuple:
+    """make_sim(theta1) -> simulator closure; called once per site so theta1 can be site-specific.
+    het_args: the parsed options for Heterogeneity (shared SNPs, theta-sd, pleiotropy) or None
+    for the default independent-SNP draw. The heterogeneity draws come from the same RNG
+    stream as the site parameters, after them, exactly as simulate_federated_sites.py does,
+    so the same --seed gives the same shared panel in both generators.
+    Returns (manifest rows, heterogeneity metadata)."""
     rng = np.random.default_rng(seed)
     n, h2_x, gamma_x, gamma_y = sample_site_params(
         rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa
     )
+    het = Heterogeneity(rng, het_args) if het_args is not None else None
+    sim_fns = [make_sim(float(het.theta1[i]) if het else None) for i in range(n_sites)]
 
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest = []
@@ -71,7 +74,7 @@ def run_federated(sim_fns, n_sites, n_snps, pop_min, pop_max,
               f"gamma_x={gamma_x[i]:.3f}  gamma_y={gamma_y[i]:.3f}{extra}")
 
     pl.DataFrame(manifest).write_csv(out_dir / "manifest.csv")
-    return manifest
+    return manifest, (het.manifest() if het else {})
 
 
 def default_out_dir(outcome, shape, link) -> Path:
@@ -116,12 +119,12 @@ def main() -> None:
     a = p.parse_args()
 
     out = a.out or default_out_dir(a.outcome, a.shape, a.link)
-    het = Heterogeneity(np.random.default_rng(a.seed), a)
-    # theta1 is closed over by the simulator, so there is one closure per site (identical unless --theta-sd)
-    sim_fns = [make_simulator(a.outcome, a.shape, float(t1), a.theta2, a.link, a.prevalence,
-                              a.weibull_k, a.weibull_scale, a.censor_frac, a.followup) for t1 in het.theta1]
-    manifest = run_federated(sim_fns, a.n_sites, a.n_snps, a.pop_min, a.pop_max,
-                              a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa, a.seed, out, het)
+    # theta1 is closed over by the simulator, so run_federated asks for one closure per site
+    def make_sim(theta1):
+        return make_simulator(a.outcome, a.shape, a.theta1 if theta1 is None else theta1, a.theta2, a.link,
+                              a.prevalence, a.weibull_k, a.weibull_scale, a.censor_frac, a.followup)
+    manifest, het_meta = run_federated(make_sim, a.n_sites, a.n_snps, a.pop_min, a.pop_max,
+                                       a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa, a.seed, out, a)
 
     manifest_meta = {
         "outcome": a.outcome, "shape": a.shape if a.outcome != "survival" else None,
@@ -132,7 +135,7 @@ def main() -> None:
         "weibull_scale": a.weibull_scale if a.outcome == "survival" else None,
         "censor_frac": a.censor_frac if a.outcome == "survival" else None,
         "followup": a.followup if a.outcome == "survival" else None,
-        "n_snps": a.n_snps, "seed": a.seed, **het.manifest(), "sites": manifest,
+        "n_snps": a.n_snps, "seed": a.seed, **het_meta, "sites": manifest,
     }
     (out / "manifest.json").write_text(json.dumps(manifest_meta, indent=1))
     print(f"\nwrote {a.n_sites} sites to {out}/ (site01..site{a.n_sites:02d}.csv + .truth.json) "

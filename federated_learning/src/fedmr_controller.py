@@ -20,12 +20,13 @@ import flamingo_fedmr as fm
 
 
 class FedMRController(ModelController):
-    def __init__(self, protocol="local", basis="linear", crossfit=0, robust=True, out_path="", **kwargs):
+    def __init__(self, protocol="local", basis="linear", crossfit=0, robust=True, out_path="", seed=0, **kwargs):
         super().__init__(**kwargs)
         self.protocol, self.basis, self.crossfit, self.robust, self.out_path = protocol, basis, crossfit, robust, out_path
+        self.seed = seed
 
     def run(self):
-        spec = {"protocol": self.protocol, "basis": self.basis, "crossfit": self.crossfit}
+        spec = {"protocol": self.protocol, "basis": self.basis, "crossfit": self.crossfit, "seed": self.seed}
         self.info(f"FedMR round 0: collecting sufficient statistics ({spec})")
         replies = self.send_model_and_wait(
             task_name="train", data=FLModel(params={}, params_type=ParamsType.FULL, current_round=0, total_rounds=2,
