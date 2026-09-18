@@ -1,0 +1,9 @@
+name: dp_distributed_secagg
+description: >
+  Distributed DP behind secure aggregation. Each site clips to 0.5 and adds 1/K of the central
+  noise, then masks. The server sees only the noisy sum: central-DP utility, and epsilon holds
+  against the server as long as all K sites add their share and the server colludes with none.
+weights: registered
+dp: {enabled: true, mode: distributed, clip_norm: 0.5, noise_multiplier: 1.0, delta: 1.0e-5}
+secagg: {enabled: true}
+leakage: {enabled: true}

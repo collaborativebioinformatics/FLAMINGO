@@ -1,0 +1,6 @@
+name: robust_median
+description: >
+  Sign-flip attack as in attack_signflip.yaml, aggregated by the sample-size-weighted
+  coordinate-wise median. Assumes honest sites hold more than half the weight.
+attack: {enabled: true, kind: sign_flip, scale: 10.0, n_malicious: 1, select: largest}
+defense: {enabled: true, rule: median}

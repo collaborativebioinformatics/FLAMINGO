@@ -1,0 +1,52 @@
+{
+ "dp": false,
+ "epsilon_aggregate": "inf",
+ "epsilon_server": "inf",
+ "config": {
+  "name": "secagg",
+  "description": "Secure aggregation by pairwise masking. The server recovers the weighted sum exactly (to 2^-24 per coordinate) but no individual update. Assumes an honest-but-curious server that does not collude with sites, and no dropouts.\n",
+  "weights": "reported",
+  "attack": {
+   "enabled": false,
+   "kind": "sign_flip",
+   "sites": [],
+   "n_malicious": 1,
+   "select": "largest",
+   "scale": 1.0,
+   "noise_std": 1.0,
+   "weight_multiplier": 1.0,
+   "start_round": 0,
+   "follows_protocol": false
+  },
+  "defense": {
+   "enabled": false,
+   "rule": "median",
+   "trim_fraction": 0.1,
+   "krum_f": 1,
+   "multi_krum_m": null,
+   "gm_max_iter": 100,
+   "gm_tol": 1e-07,
+   "gm_nu": 1e-06,
+   "norm_bound": null,
+   "norm_bound_multiplier": 1.0
+  },
+  "dp": {
+   "enabled": false,
+   "mode": "central",
+   "clip_norm": 0.5,
+   "noise_multiplier": 1.0,
+   "delta": 1e-05,
+   "min_honest": null
+  },
+  "secagg": {
+   "enabled": true,
+   "frac_bits": 24
+  },
+  "leakage": {
+   "enabled": true,
+   "mia_max_members": 2000
+  }
+ },
+ "malicious_sites": [],
+ "seed": 0
+}

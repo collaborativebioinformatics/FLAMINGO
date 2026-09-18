@@ -25,12 +25,16 @@ def fedavg(states, weights):
     return avg
 
 
-def run(sites, data_dir, metrics_dir, method, rounds, epochs, lr, batch_size=0, test_size=0.2, seed=0):
+def run(sites, data_dir, metrics_dir, method, rounds, epochs, lr, batch_size=0, test_size=0.2, seed=0, secure=None):
+    """secure: a fedsec.config.SecureConfig. None, or one with every component off, runs plain FedAvg below."""
     torch.manual_seed(seed)
     global_params = copy.deepcopy(make_model(method).state_dict())
     clients = [Site(s, data_dir, metrics_dir, method, epochs, lr, batch_size, test_size, seed) for s in sites]
     for c in clients:
         print(c.describe(), flush=True)
+    if secure is not None and secure.active:
+        from fedsec.protocol import run_local
+        return run_local(clients, global_params, rounds, secure, seed, metrics_dir)
     # Sites run one after another: the ops are too small for threads to help (the
     # GIL dominates), and parallelism across (dataset, method) jobs comes from --jobs.
     for rnd in range(rounds):

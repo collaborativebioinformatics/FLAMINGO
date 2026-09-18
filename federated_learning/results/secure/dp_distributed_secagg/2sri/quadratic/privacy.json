@@ -1,0 +1,67 @@
+{
+ "dp": true,
+ "mode": "distributed",
+ "secagg": true,
+ "rounds": 5,
+ "clip_norm": 0.5,
+ "noise_multiplier": 1.0,
+ "delta": 1e-05,
+ "max_weight": 0.17000067964024376,
+ "min_honest": 10,
+ "noise_adding_sites": 10,
+ "sites": 10,
+ "mu_aggregate": 2.23606797749979,
+ "mu_server": 2.23606797749979,
+ "epsilon_aggregate": 11.480022809172569,
+ "epsilon_server": 11.480022809172569,
+ "epsilon_aggregate_replace": 28.37347380325739,
+ "epsilon_server_replace": 28.37347380325739,
+ "adjacency": "add/remove one site's data (sensitivity C, or w_max C for the weighted sum); *_replace: change one site's data (sensitivity doubled)",
+ "config": {
+  "name": "dp_distributed_secagg",
+  "description": "Distributed DP behind secure aggregation. Each site clips to 0.5 and adds 1/K of the central noise, then masks. The server sees only the noisy sum: central-DP utility, and epsilon holds against the server as long as all K sites add their share and the server colludes with none.\n",
+  "weights": "registered",
+  "attack": {
+   "enabled": false,
+   "kind": "sign_flip",
+   "sites": [],
+   "n_malicious": 1,
+   "select": "largest",
+   "scale": 1.0,
+   "noise_std": 1.0,
+   "weight_multiplier": 1.0,
+   "start_round": 0,
+   "follows_protocol": false
+  },
+  "defense": {
+   "enabled": false,
+   "rule": "median",
+   "trim_fraction": 0.1,
+   "krum_f": 1,
+   "multi_krum_m": null,
+   "gm_max_iter": 100,
+   "gm_tol": 1e-07,
+   "gm_nu": 1e-06,
+   "norm_bound": null,
+   "norm_bound_multiplier": 1.0
+  },
+  "dp": {
+   "enabled": true,
+   "mode": "distributed",
+   "clip_norm": 0.5,
+   "noise_multiplier": 1.0,
+   "delta": 1e-05,
+   "min_honest": null
+  },
+  "secagg": {
+   "enabled": true,
+   "frac_bits": 24
+  },
+  "leakage": {
+   "enabled": true,
+   "mia_max_members": 2000
+  }
+ },
+ "malicious_sites": [],
+ "seed": 0
+}

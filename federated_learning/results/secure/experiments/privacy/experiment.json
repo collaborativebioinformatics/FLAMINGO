@@ -1,0 +1,212 @@
+{
+ "suite": "privacy",
+ "settings": {
+  "method": "2sri",
+  "datasets": [
+   "quadratic",
+   "cox"
+  ],
+  "seeds": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9
+  ],
+  "rounds": 5,
+  "epochs": 2,
+  "lr": 0.01
+ },
+ "datasets": [
+  "quadratic",
+  "cox"
+ ],
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "scenarios": {
+  "clean": null,
+  "plain_fedavg": {
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "secagg": {
+   "secagg": {
+    "enabled": true
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "central_z0.5": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "central",
+    "noise_multiplier": 0.5
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "central_z1": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "central",
+    "noise_multiplier": 1.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "central_z2": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "central",
+    "noise_multiplier": 2.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "central_z4": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "central",
+    "noise_multiplier": 4.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg_z0.5": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 0.5
+   },
+   "secagg": {
+    "enabled": true
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg_z1": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 1.0
+   },
+   "secagg": {
+    "enabled": true
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg_z2": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 2.0
+   },
+   "secagg": {
+    "enabled": true
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg_z4": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 4.0
+   },
+   "secagg": {
+    "enabled": true
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "distributed_nosecagg_z1": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 1.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "local_z0.5": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 0.5
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "local_z1": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 1.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "local_z2": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 2.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  },
+  "local_z4": {
+   "weights": "registered",
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 4.0
+   },
+   "leakage": {
+    "enabled": true
+   }
+  }
+ }
+}

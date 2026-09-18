@@ -1,0 +1,7 @@
+name: attack_shuffle_trimmed
+description: >
+  Data poisoning: the two largest sites train on outcomes permuted within their site, which
+  pulls the causal curve toward flat, and send their updates honestly. Aggregated by a
+  coordinate-wise trimmed mean that drops 2 of 10 sites at each end.
+attack: {enabled: true, kind: outcome_shuffle, n_malicious: 2, select: largest}
+defense: {enabled: true, rule: trimmed_mean, trim_fraction: 0.2}

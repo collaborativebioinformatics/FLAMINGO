@@ -1,0 +1,7 @@
+name: dp_local
+description: >
+  Local site-level DP. Each site clips to 0.5 and adds noise with multiplier 1 to its own
+  update, so the server sees only noisy updates. About K times more total noise than central.
+weights: registered
+dp: {enabled: true, mode: local, clip_norm: 0.5, noise_multiplier: 1.0, delta: 1.0e-5}
+leakage: {enabled: true}

@@ -1,0 +1,675 @@
+{
+ "suite": "robustness",
+ "settings": {
+  "method": "2sri",
+  "datasets": [
+   "quadratic",
+   "cox"
+  ],
+  "seeds": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "rounds": 5,
+  "epochs": 2,
+  "lr": 0.01
+ },
+ "datasets": [
+  "quadratic",
+  "cox"
+ ],
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4
+ ],
+ "scenarios": {
+  "clean": null,
+  "no_attack|fedavg": {},
+  "no_attack|fedavg_registered": {
+   "weights": "registered"
+  },
+  "no_attack|norm_bound": {
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "no_attack|median": {
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "no_attack|trimmed_mean": {
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "no_attack|krum": {
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "no_attack|multi_krum": {
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "no_attack|geometric_median": {
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "sign_flip|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   }
+  },
+  "sign_flip|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "weights": "registered"
+  },
+  "sign_flip|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "sign_flip|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "sign_flip|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "sign_flip|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "sign_flip|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "sign_flip|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "scale|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   }
+  },
+  "scale|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "weights": "registered"
+  },
+  "scale|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "scale|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "scale|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "scale|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "scale|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "scale|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "scale",
+    "scale": 10.0,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "gaussian|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   }
+  },
+  "gaussian|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "weights": "registered"
+  },
+  "gaussian|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "gaussian|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "gaussian|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "gaussian|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "gaussian|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "gaussian|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "gaussian",
+    "noise_std": 0.1,
+    "n_malicious": 1,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "outcome_flip|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   }
+  },
+  "outcome_flip|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "weights": "registered"
+  },
+  "outcome_flip|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "outcome_flip|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "outcome_flip|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "outcome_flip|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "outcome_flip|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "outcome_flip|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "outcome_shuffle|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   }
+  },
+  "outcome_shuffle|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "weights": "registered"
+  },
+  "outcome_shuffle|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "outcome_shuffle|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "outcome_shuffle|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "outcome_shuffle|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "outcome_shuffle|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "outcome_shuffle|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_shuffle",
+    "n_malicious": 2,
+    "select": "largest"
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  },
+  "flip_inflate|fedavg": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   }
+  },
+  "flip_inflate|fedavg_registered": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "weights": "registered"
+  },
+  "flip_inflate|norm_bound": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "fedavg",
+    "norm_bound": "adaptive",
+    "norm_bound_multiplier": 1.0
+   }
+  },
+  "flip_inflate|median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "flip_inflate|trimmed_mean": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "trimmed_mean",
+    "trim_fraction": 0.2
+   }
+  },
+  "flip_inflate|krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "krum",
+    "krum_f": 2
+   }
+  },
+  "flip_inflate|multi_krum": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "multi_krum",
+    "krum_f": 2
+   }
+  },
+  "flip_inflate|geometric_median": {
+   "attack": {
+    "enabled": true,
+    "kind": "outcome_flip",
+    "n_malicious": 1,
+    "select": "smallest",
+    "weight_multiplier": 20.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "geometric_median"
+   }
+  }
+ }
+}

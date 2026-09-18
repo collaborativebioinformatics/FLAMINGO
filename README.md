@@ -57,3 +57,4 @@ Mendelian randomization (MR) uses genetic variants as natural experiments to est
 
 - [In-depth reasoning](indepth_reasoning.md): more detail on the methods and the reasoning behind them.
 - [FedMR](data/docs/federated-exact-mr.md): exact federated one-sample MR from sufficient statistics, the protocols, the identity checks and the seed sweep; plan and review history in [data/docs/fedmr-plan.md](data/docs/fedmr-plan.md).
+- [Robust and privacy-preserving federation](federated_learning/ROBUST_PRIVATE.md): malicious sites, what the server learns from the updates, differential privacy and secure aggregation for the federated MR second stage.
