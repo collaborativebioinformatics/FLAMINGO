@@ -121,7 +121,7 @@ NVFlare client and the analysis scripts run the same arithmetic.
    `quadratic_2sls`.
 4. **Driver and outputs** (`scripts/federated_exact_mr.py`): done. Four-way
    comparison per set, `results/fed2sls.<shape>.csv`; the forest plots keep
-   the NVFlare 2SRI row (`federated: FedAvg`, flexible curve, no analytic CI)
+   the NVFlare 2SRI row (`federated: Fed-2SRI`, flexible curve, no analytic CI)
    and add `federated: Fed-2SLS` (specified basis, analytic CI); the
    dose-response plot draws the Fed-2SLS quadratic curve over the concatenated
    one.

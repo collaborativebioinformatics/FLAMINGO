@@ -24,7 +24,7 @@ the federated workflow over it, runs the chain and compares every estimator:
 | step | script | runs for |
 |---|---|---|
 | Simulate sites | `simulate_federated_sites.py` | all shapes |
-| Federated learning (FedAvg naive/2SRI/2SPS, and Fed-2SLS exact 2SLS) | `federated_learning/job.py` | when enabled; Fed-2SLS on continuous shapes |
+| Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS) | `federated_learning/job.py` | when enabled; Fed-2SLS on continuous shapes |
 | Conventional MR | `federated_summary_mr.py` | all shapes |
 | Non-linear MR | `federated_nonlinear_mr.py` | `quadratic`, `threshold` |
 

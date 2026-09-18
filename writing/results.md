@@ -23,7 +23,7 @@ and without training.
 
 The three federated routes now on every forest plot answer different
 questions. Per-SNP summary statistics give the average slope with no loss
-of precision but no curvature. The FedAvg 2SRI network gives a flexible
+of precision but no curvature. The Fed-2SRI network (trained with FedAvg) gives a flexible
 curve, including the threshold plateau, but no analytic confidence
 interval and a slope that drifts from the truth. Fed-2SLS gives the pooled
 estimate and interval for a specified basis, in one or two rounds.

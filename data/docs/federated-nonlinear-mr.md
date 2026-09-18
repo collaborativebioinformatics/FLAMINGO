@@ -59,8 +59,8 @@ would locate the cutoff.
 ## Federated learning: naive and as MR
 
 The plots carry two more dashed lines from `../federated_learning/`
-(`job.py --dataset quadratic --method naive --method 2sri`), an NVFlare
-FedAvg MLP trained across the ten sites without pooling individual data.
+(`job.py --dataset quadratic --method naive --method 2sri`), the Fed-2SRI
+network (an MLP trained with FedAvg) across the ten sites without pooling individual data.
 
 **Naive (green).** Fits `E[Y | X]` directly. It recovers the *shape* of the
 association, quadratic curvature and the threshold kink alike, because a

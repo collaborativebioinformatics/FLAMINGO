@@ -41,7 +41,7 @@ DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 # The repository is one environment, so every step runs in this interpreter.
 # Both overrides remain for pointing a step at a separate environment.
 FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
-FL_METHODS = ("naive", "2sri", "2sps", "fed2sls")
+FL_METHODS = ("2sri", "fed2sls")
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
@@ -50,7 +50,7 @@ CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recove
 # so they deliberately stay out of the run id.
 EXPERIMENT_DEFAULTS: dict = {
     "run_federated": True,
-    "fl_methods": ["naive", "2sri", "fed2sls"],
+    "fl_methods": ["2sri", "fed2sls"],
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
@@ -203,9 +203,7 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
 # One name per federated method, used for the output headings and the estimator table.
 # Each says whether it is MR, which MR design, and how it is federated.
 METHOD_LABELS = {
-    "naive": "Federated naive · FedAvg, no instruments (not MR)",
-    "2sri": "Federated MR · 2SRI (control function), FedAvg",
-    "2sps": "Federated MR · 2SPS (predicted exposure), FedAvg",
+    "2sri": "Federated MR · Fed-2SRI (control function, FedAvg-trained)",
     "fed2sls": "Federated MR · Fed-2SLS (exact 2SLS from summed statistics)",
 }
 
@@ -249,7 +247,7 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (FedAvg: naive, MR 2SRI / 2SPS; Fed-2SLS exact 2SLS)",
+        label="Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
@@ -282,7 +280,6 @@ PIPELINE: tuple[Step, ...] = (
             "--sites", paths.sites_for(p["shape"]),
             "--out", _nonlinear_png(p, paths),
             "--federated", paths.fl,
-            # only the MR fit on the dose-response plot; the naive FedAvg curve stays in the table
             "--federated_methods", *NONLINEAR_FL_CURVES,
         ],
         outputs=lambda p, paths: {"Dose–response curve": _nonlinear_png(p, paths)},

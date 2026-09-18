@@ -424,9 +424,7 @@ with tab_experiments:
         run_params["fl_methods"] = c1.multiselect(
             "Methods", runner.FL_METHODS, default=runner.EXPERIMENT_DEFAULTS["fl_methods"],
             disabled=not run_params["run_federated"],
-            help="naive: outcome on X directly, the confounded association. "
-                 "2sri: site-local first stage, then a federated control function. "
-                 "2sps: site-local first stage, then federated on the predicted X. "
+            help="2sri: site-local first stage, then a federated control-function network trained with FedAvg. "
                  "fed2sls: exact 2SLS from summed sufficient statistics, no training "
                  "(continuous outcomes; skipped for cox).",
         )

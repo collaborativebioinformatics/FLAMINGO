@@ -38,7 +38,7 @@ from simulate_basic import causal_curve  # noqa: E402
 
 POOLED_COLOR, SUMSTATS_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#8a2be2", "#1f1f1e", "#6b6a63", "#e6e5df"
 FL_STYLE = {"naive": ("#1baf7a", "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
-            "2sri": ("#4a3aa7", "federated MR · 2SRI (FedAvg MLP): f(X), first-stage residual as control function")}
+            "2sri": ("#4a3aa7", "federated Fed-2SRI (FedAvg-trained network): f(X), first-stage residual as control function")}
 
 
 def load_sites(folder: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:

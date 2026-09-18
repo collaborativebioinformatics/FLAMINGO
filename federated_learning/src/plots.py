@@ -30,8 +30,8 @@ BLUE, ORANGE, GRAY, INK, MUTED, SURFACE, GRID = (
     "#256abf", "#eb6834", "#b8b8b5", "#1f1f1e", "#6b6b68", "#fcfcfb", "#e6e6e3")
 METHOD_STYLE = {                     # fixed colour per method, never cycled
     "naive": dict(color=BLUE, label="federated naive: f(X)"),
-    "2sri": dict(color="#4a3aa7", label="federated MR 2SRI: f(X) with control function"),
-    "2sps": dict(color="#1baf7a", label="federated MR 2SPS: f(X_hat)"),
+    "2sri": dict(color="#4a3aa7", label="federated Fed-2SRI: f(X) with control function"),
+    "2sps": dict(color="#1baf7a", label="federated Fed-2SPS: f(X_hat)"),
     "fed2sls": dict(color="#8a2be2", label="federated Fed-2SLS: exact pooled 2SLS, 95% band"),
 }
 METHODS = list(METHOD_STYLE)
@@ -238,7 +238,7 @@ def plot_overview(datasets, results_root, fed_dir, out):
             handles.setdefault(l.split(", round")[0].split(" (solid")[0], h)
     fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="upper right", ncol=2,
                bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("Federated X -> outcome curve: naive vs MR (FedAvg and Fed-2SLS)", x=0.01, ha="left",
+    fig.suptitle("Federated X -> outcome curve: naive vs MR (Fed-2SRI, Fed-2SPS, Fed-2SLS)", x=0.01, ha="left",
                  fontsize=12, color=INK, fontweight="bold")
     fig.text(0.01, 0.925, NOTE, fontsize=8, color=MUTED)
     fig.tight_layout(rect=(0, 0, 1, 0.905))

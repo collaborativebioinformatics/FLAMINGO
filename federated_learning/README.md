@@ -97,9 +97,9 @@ uv run python job.py --all --method fed2sls --engine local                # same
 files and, for site-specific SNPs, the pooled fit in numpy, and fails
 unless all three agree to 1e-10; the observed gaps are recorded in
 `results/fed2sls/<dataset>/metrics.csv` and sit at 1e-16 on every set. The
-`fed2sls` row lands on the same fitted-curve and overview plots as the FedAvg
+`fed2sls` row lands on the same fitted-curve and overview plots as the Fed-2SRI and Fed-2SPS
 methods, drawn with its analytic 95% band, and in `results/summary.csv` as
-`theta_X`, `se_X`, `robust_se_X` and `first_stage_F`. The FedAvg 2SRI model
+`theta_X`, `se_X`, `robust_se_X` and `first_stage_F`. The Fed-2SRI model
 above and Fed-2SLS answer different questions (a flexible curve without an
 analytic CI versus a specified basis with one), and the forest plots in
 `../data/results/` keep both rows. See `../data/docs/federated-exact-mr.md`.

@@ -1,8 +1,8 @@
 # Fed-2SLS: exact federated MR from sufficient statistics
 
 The summary-statistics route (`federated-summary-mr.md`) recovers the
-average slope but not the curve; the NVFlare FedAvg route
-(`../../federated_learning/`) recovers a flexible curve but has no analytic
+average slope but not the curve; the Fed-2SRI route (a FedAvg-trained
+network in `../../federated_learning/`) recovers a flexible curve but has no analytic
 standard error and is an approximation. Fed-2SLS is a third federated route:
 each site releases a few cross-product matrices, the coordinator sums them
 and solves, and the result *is* the pooled two-stage least squares (2SLS)
@@ -133,7 +133,7 @@ continuous set the three agree to 1e-16 in the estimate and the robust SE
 (`../../federated_learning/results/fed2sls/<dataset>/metrics.csv`). The
 quadratic basis runs the same way (`--fed2sls_basis quadratic`), and the
 result is drawn with its analytic band on the same fitted-curve plots as
-the FedAvg methods.
+the Fed-2SRI and Fed-2SPS methods.
 
 ## What is, and is not, protected
 
