@@ -46,11 +46,11 @@ def _binary_simulator(shape, theta1, theta2, link, prevalence) -> Callable[..., 
 
 def _survival_simulator(theta, weibull_k, weibull_scale, censor_frac, followup) -> Callable[..., tuple]:
     def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra) -> tuple:
-        if extra:
-            raise ValueError("shared SNPs / pleiotropy are not implemented for the survival simulator")
+        if extra.get("alpha") is not None:
+            raise ValueError("pleiotropy is not implemented for the survival simulator")
         df, truth = simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
                                       weibull_k=weibull_k, weibull_scale=weibull_scale,
-                                      censor_frac=censor_frac, followup=followup)
+                                      censor_frac=censor_frac, followup=followup, **extra)
         truth.setdefault("avg_slope", theta)   # log hazard ratio per unit X, what IVW targets
         return df, truth
     return sim_fn

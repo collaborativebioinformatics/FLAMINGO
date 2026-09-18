@@ -14,7 +14,8 @@ theta1, theta2 (the causal curve) are fixed across all sites: the causal
 effect of X on Y is assumed to be biology, not geography.
 
 Between-site heterogeneity knobs (--shared-snps, --maf-shift, --theta-sd,
---pleiotropy-*) are defined in heterogeneity.py and off by default.
+--pleiotropy-*) are defined in heterogeneity.py. Shared SNPs are on by
+default (--no-shared-snps for site-specific variants); the others are off.
 """
 
 import argparse
@@ -86,8 +87,8 @@ def main() -> None:
         rng, a.n_sites, a.pop_min, a.pop_max, a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa
     )
 
-    if a.shape == "cox" and (a.shared_snps or a.pleiotropy_mean or a.pleiotropy_sd):
-        raise SystemExit("--shared-snps and pleiotropy are implemented for the continuous shapes only")
+    if a.shape == "cox" and (a.pleiotropy_mean or a.pleiotropy_sd):
+        raise SystemExit("pleiotropy is implemented for the continuous shapes only")
     het = Heterogeneity(rng, a)
 
     a.out.mkdir(parents=True, exist_ok=True)
@@ -103,7 +104,7 @@ def main() -> None:
             truth["avg_slope"] = t1
         elif a.shape == "cox":
             df, truth = simulate_survival(*common, t1, *nuisance,
-                                          censor_frac=a.censor_frac, followup=a.followup)
+                                          censor_frac=a.censor_frac, followup=a.followup, **extra)
             truth["avg_slope"] = t1
         else:
             df, truth = simulate_nonlinear(*common, a.shape, t1, a.theta2, *nuisance, **extra)

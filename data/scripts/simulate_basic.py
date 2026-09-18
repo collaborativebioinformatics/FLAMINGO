@@ -124,7 +124,8 @@ def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y,
 
 
 def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
-                      weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0) -> tuple:
+                      weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0,
+                      maf=None, beta=None, alpha=None) -> tuple:
     """Cox proportional-hazards outcome: h(t) = h0(t) exp(theta X + gamma_y U).
 
     h0 is Weibull with shape weibull_k and scale weibull_scale, so event times are
@@ -133,8 +134,10 @@ def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
     censor_frac of subjects are censored before administrative end of follow-up.
     Columns `time` and `event` replace `Y`.
     """
+    if alpha is not None:
+        raise NotImplementedError("pleiotropy is not implemented for the survival outcome")
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
     lp = theta * X + gamma_y * U
     T = weibull_scale * (-np.log(rng.uniform(size=n)) / np.exp(lp)) ** (1.0 / weibull_k)
 

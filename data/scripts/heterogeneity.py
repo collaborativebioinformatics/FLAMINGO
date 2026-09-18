@@ -2,12 +2,14 @@
 allele-frequency shifts, site-specific causal effects and pleiotropy.
 
 Owned here so that simulate_federated_sites.py, simulate_federated.py and
-fedmr_sweep.py share one definition. All knobs are off by default, so the
-checked-in sets are unchanged.
+fedmr_sweep.py share one definition. Shared SNPs are the default; every
+other knob is off by default.
 
     --shared-snps       one MAF vector and one beta vector drawn from the base seed and
                         reused at every site; each site's h2_x then follows from those
-                        effects at its own allele frequencies (realized, not drawn)
+                        effects at its own allele frequencies (realized, not drawn).
+                        Default on; --no-shared-snps gives every site its own variants
+                        (how the checked-in sets other than linear_shared were made)
     --maf-shift SD      with --shared-snps, perturb each site's allele frequencies on the
                         logit scale by N(0, SD)
     --theta-sd SD       site-specific causal effect theta1 + N(0, SD)
@@ -28,7 +30,8 @@ from simulate_basic import scaled_beta  # noqa: E402
 
 
 def add_heterogeneity_args(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--shared-snps", action="store_true", help="same SNPs (MAF, beta) at every site")
+    p.add_argument("--shared-snps", action=argparse.BooleanOptionalAction, default=True,
+                   help="same SNPs (MAF, beta) at every site (default); --no-shared-snps draws site-specific variants")
     p.add_argument("--maf-shift", type=float, default=0.0, help="with --shared-snps: logit-scale SD of per-site MAF shifts")
     p.add_argument("--theta-sd", type=float, default=0.0, help="SD of site-specific theta1 around --theta1")
     p.add_argument("--pleiotropy-mean", type=float, default=0.0, help="mean direct SNP -> Y effect per allele")

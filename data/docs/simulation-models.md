@@ -72,9 +72,11 @@ own seed, so its SNPs are distinct variants from every other site's.
 The registry is the extension point: a new outcome type is one branch in
 `simulators.py`, and the federated orchestrator does not change.
 
-Both generators take the same heterogeneity knobs (all off by default, so
-the checked-in sets are unchanged): `--shared-snps` draws one MAF vector and
-one `beta` vector from the base seed and reuses them at every site, with
+Both generators take the same heterogeneity knobs. `--shared-snps` is on
+by default (`--no-shared-snps` restores site-specific variants, which is
+how every checked-in set except `linear_shared` was made): it draws one
+MAF vector and one `beta` vector from the base seed and reuses them at
+every site, with
 each site's realized `h2_x` computed from those effects at its own allele
 frequencies (recorded in the manifest, replacing the drawn value);
 `--maf-shift SD` perturbs the shared MAFs per site on the logit scale;
@@ -98,7 +100,7 @@ accepts none of these.
 | `federated/cox` | survival, θ = 0.3 | same sites |
 | `federated/cox_rare` | survival, θ = 0.3, sites of 300 to 3,000, follow-up 1.2 | 24 to 128 events per site |
 | `federated/binary_quadratic_logistic` | binary, quadratic, θ1 = 0.3, θ2 = 0.15, logistic link, prevalence 0.3 | same sites |
-| `federated/linear_shared` | continuous, linear, θ = 0.3, `--shared-snps` | same sites and sizes, the same 20 SNPs everywhere; for the shared-instrument FedMR protocol |
+| `federated/linear_shared` | continuous, linear, θ = 0.3, `--shared-snps` (now the default) | same sites and sizes, the same 20 SNPs everywhere; for the shared-instrument FedMR protocol |
 
 Each federated folder holds `site01..site10.{csv,truth.json}` and a
 `manifest.{csv,json}` with the per-site draws. Folders that have been through
