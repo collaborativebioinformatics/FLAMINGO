@@ -36,9 +36,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from federated_summary_mr import gwas, ivw, quadratic_2sls  # noqa: E402
 from simulate_basic import causal_curve  # noqa: E402
 
-POOLED_COLOR, SUMSTATS_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#8a2be2", "#1f1f1e", "#6b6a63", "#e6e5df"
-FL_STYLE = {"naive": ("#1baf7a", "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
-            "2sri": ("#4a3aa7", "federated Fed-2SRI (FedAvg-trained network): f(X), first-stage residual as control function")}
+import mr_style as S  # noqa: E402  one look per estimator across every figure in the repo
+
+POOLED_COLOR, SUMSTATS_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = S.BLUE, S.ORANGE, S.VIOLET, S.INK, S.MUTED, S.GRID
+FL_STYLE = {"naive": (S.NAIVE, "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
+            "2sri": (S.FED2SRI, "federated Fed-2SRI (FedAvg-trained network): f(X), first-stage residual as control function")}
 
 
 def load_sites(folder: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -116,20 +118,20 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
     ax.fill_between(x, fit - 1.96 * fit_se, fit + 1.96 * fit_se, color=POOLED_COLOR, alpha=0.18, linewidth=0)
-    ax.plot(x, truth, color=INK, linewidth=2, linestyle="--", label=f"true curve ({a.shape}, θ1={t1}, θ2={t2})")
-    ax.plot(x, fit, color=POOLED_COLOR, linewidth=2,
+    ax.plot(x, truth, **S.line(S.TRUTH), label=f"true curve ({a.shape}, θ1={t1}, θ2={t2})")
+    ax.plot(x, fit, **S.line(S.CONCATENATED),
             label=f"concatenated: quadratic 2SLS  θ1={theta[0]:.2f}, θ2={theta[1]:.2f} (95% band)")
-    ax.plot(x, line, color=SUMSTATS_COLOR, linewidth=2, label=f"sumstats: linear IVW  slope={slope:.2f}")
-    ax.plot(x, basis @ fm_theta, color=FED2SLS_COLOR, linewidth=1.4, linestyle=(0, (1, 2)),
+    ax.plot(x, line, **S.line(S.SUMSTATS), label=f"sumstats: linear IVW  slope={slope:.2f}")
+    ax.plot(x, basis @ fm_theta, **S.line(S.FED2SLS),
             label=f"federated: Fed-2SLS sufficient statistics, identical to concatenated (|Δθ| = {fm_diff:.0e})")
-    for m, (color, label) in FL_STYLE.items():
+    for m, (style, label) in FL_STYLE.items():
         if m not in fl:
             continue
         if fl[m] is None:
             print(f"no federated {m} curve under {a.federated}; run federated_learning/job.py "
                   f"--dataset {a.shape} --method {m} to add it")
             continue
-        ax.plot(x, fl[m][0], color=color, linewidth=2, linestyle=(0, (5, 2)), label=f"{label}, round {fl[m][1]}")
+        ax.plot(x, fl[m][0], **S.line(style), label=f"{label}, round {fl[m][1]}")
         print(f"federated {m} curve:          from {a.federated / m / a.shape}")
     X_all = np.concatenate([s[1] for s in sites])
     ax2 = ax.twinx()

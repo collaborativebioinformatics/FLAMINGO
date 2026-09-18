@@ -32,8 +32,11 @@ from lifelines import CoxPHFitter
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = ("#2a78d6", "#eb6834", "#1baf7a", "#8a2be2",
-                                                                     "#1f1f1e", "#6b6a63", "#e6e5df")
+import mr_style as S  # noqa: E402  one look per estimator across every figure in the repo
+
+SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, FED2SLS_COLOR, POOLED_COLOR = (
+    S.SITE_BLUE, S.ORANGE, S.GREEN, S.VIOLET, S.BLUE)
+INK, MUTED, GRID = S.INK, S.MUTED, S.GRID
 FL_RESULTS = Path(__file__).resolve().parents[2] / "federated_learning" / "results"
 
 
@@ -204,8 +207,8 @@ def forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, shap
                     ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
     if "pooled" in rows_y:
         pooled_label = "concatenated: one stratified 2SPS Cox" if shape == "cox" else "concatenated: one pooled 2SLS"
-        ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=INK, ms=7,
-                    ecolor=INK, elinewidth=3, label=pooled_label)
+        ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=POOLED_COLOR, ms=7,
+                    ecolor=POOLED_COLOR, elinewidth=3, label=pooled_label)
     if rows_y:
         ax.axhline(-0.4, color=GRID, linewidth=0.8)
     _family_rows(ax, y, rows_y, res, res["n"].sum(),
@@ -334,10 +337,10 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
             ax1.text(0.5, rows_y["fed2sls"], "no Fed-2SLS run for this dataset", transform=ax1.get_yaxis_transform(),
                      ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
     if "pooled" in rows_y:
-        ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s", color=INK,
-                     ms=7, ecolor=INK, elinewidth=3, label="concatenated: one quadratic 2SLS")
-        ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s", color=INK,
-                     ms=7, ecolor=INK, elinewidth=3)
+        ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s",
+                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3, label="concatenated: one quadratic 2SLS")
+        ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s",
+                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3)
     ax1.set_xlabel("θ1: slope at X = 0")
     slope_note = "" if abs(avg_slope_target - theta1) <= 0.01 else f";  dotted: average slope {avg_slope_target:.2f}"
     ax1.set_title(f"dashed: true θ1 = {theta1}{slope_note}", loc="left", fontsize=10, color=INK)

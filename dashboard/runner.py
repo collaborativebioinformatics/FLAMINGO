@@ -169,6 +169,8 @@ class Step:
     # Output paths alone are not enough: rerunning with more rounds writes the
     # same file names, so without this a changed setting would look cached.
     signature: Callable[[dict], dict] = lambda p: {}
+    # Runs before the cache check and the script (e.g. to clear outputs of a deselected model).
+    before: Callable[[dict, RunPaths], None] = lambda p, paths: None
     python: str = field(default=DATA_PYTHON)
     cwd: Path = field(default=DATA_DIR)
 
@@ -226,6 +228,16 @@ def method_label(method: str) -> str:
     return METHOD_LABELS.get(method, f"Federated · {method}")
 
 
+def _federated_clear_stale(p: dict, paths: RunPaths) -> None:
+    """Drop results of federated methods that are no longer selected. job.py only writes the
+    methods it runs, and the overview plot and the forest's curve lookup read whatever is on
+    disk, so a deselected method would otherwise linger from an earlier run."""
+    import shutil
+    for method in ("naive", "2sri", "2sps", "fed2sls"):
+        if method not in p["fl_methods"]:
+            shutil.rmtree(paths.fl / method, ignore_errors=True)
+
+
 def _federated_outputs(p: dict, paths: RunPaths) -> dict:
     out = {}
     for method in p["fl_methods"]:
@@ -264,6 +276,7 @@ PIPELINE: tuple[Step, ...] = (
         cwd=FL_DIR,
         argv=_federated_argv,
         outputs=_federated_outputs,
+        before=_federated_clear_stale,
         signature=lambda p: {**{k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
                              "fed2sls_basis": "quadratic" if p["shape"] in CURVED_SHAPES else "linear"},
         applies=lambda p: bool(p["fl_methods"]),
@@ -304,6 +317,14 @@ PIPELINE: tuple[Step, ...] = (
 )
 
 STEPS = {s.key: s for s in PIPELINE}
+
+# Bump when the look of a figure changes (colours, labels, layout) so that cached
+# runs re-render: every plotting step folds it into its signature.
+FIGURE_VERSION = 3
+for _step in PIPELINE:
+    if _step.key != "simulate":
+        _sig = _step.signature
+        object.__setattr__(_step, "signature", (lambda p, _s=_sig: {**_s(p), "figure_version": FIGURE_VERSION}))
 
 # What the results page leads with: the dose-response curve where the shape has
 # one to recover, otherwise the forest plot.
@@ -359,10 +380,11 @@ def execute(step: Step, params: dict, paths: RunPaths, force: bool = False) -> S
     params = full(params)
     paths.mkdirs()
     log = paths.logs / f"{step.key}.log"
+    params = full(params)          # every callback sees the derived keys (fl_methods, run_federated)
+    step.before(params, paths)     # also when cached: stale outputs from other selections must go
     if not force and is_complete(step, params, paths) and log.exists():
         return StepResult(step.key, True, 0, "", log.read_text(), 0.0, cached=True)
 
-    params = full(params)          # every callback sees the derived keys (fl_methods, run_federated)
     argv = [step.python, str(step.script)] + [str(a) for a in step.argv(params, paths)]
     command = " ".join(argv)
     start = time.perf_counter()
