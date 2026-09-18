@@ -17,6 +17,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import runner  # noqa: E402
+import sensitivity_tab  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 LOGO = HERE / "assets" / "flamingo-logo-128.png"
@@ -255,7 +256,8 @@ st.sidebar.caption(f"Run `{paths.root.name}`")
 force = st.sidebar.checkbox("Force re-run", value=False,
                             help="Recompute even when this parameter set already has results.")
 
-tab_data, tab_experiments = st.tabs(["1 · Data generation", "2 · Experiments & results"])
+tab_data, tab_experiments, tab_sensitivity = st.tabs(
+    ["1 · Data generation", "2 · Experiments & results", "3 · Sensitivity & invariance"])
 
 with tab_data:
     st.subheader("Simulate federated biobank sites")
@@ -338,3 +340,7 @@ with tab_experiments:
                          width="stretch", hide_index=True)
         else:
             st.caption("No runs recorded yet.")
+
+with tab_sensitivity:
+    st.subheader("How much does the answer depend on which sites, which instruments and which fit?")
+    sensitivity_tab.render(params, paths, stat_card, stat_row)

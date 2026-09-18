@@ -28,6 +28,29 @@ dose-response plot:
 | Conventional MR | `federated_summary_mr.py` | all shapes |
 | Non-linear MR | `federated_nonlinear_mr.py` | `quadratic`, `threshold` |
 
+**3 · Sensitivity & invariance** asks how much the answer depends on which
+sites, which instruments and which fit. It needs no run: it works from the
+generated sites (or, before any run, from the committed federation in
+`data/simulated_data/federated/<shape>`) and computes everything live from one
+small bundle per site — `n`, column means and the site-centred cross products of
+`(Y, X, X², x̂, x̂²)`, plus `G′G` and `G′(Y, X)` — so every estimate below is a
+sum of per-site matrices, which is what a federation would exchange. Shapes with
+a continuous outcome only (linear, quadratic, threshold).
+
+| sub-tab | what it shows |
+|---|---|
+| Overview | every estimator on one forest (pooled 2SLS, IVW / random-effects / equal-weight meta-analysis, minimax, anchor γ→∞, PULSE, LIML, naive); naive vs 2SLS slope per site |
+| Leave sites out | drop-1 forest, influence bubbles (IV vs naive), leave-k-out distributions, cumulative meta-analysis in a chosen order, per-site forest with FE/RE and prediction interval, funnel, pairwise disagreement, weak-instrument filter |
+| Regularisation | K-class path OLS → PULSE → 2SLS → LIML with the instrument test along it, ridge on the second stage, site re-weighting by precision^a |
+| Robust across sites | anchor regression with the site as anchor (γ path, IV and naive), the minimax estimate no site objects to (Wald fan or contour), V-REx path |
+| Invariance & ICP | GMM validity certificate split into within-site (instrument validity) and between-site (same θ) parts; per-SNP cross-site invariance heatmap and greedy invariant-instrument search; classic ICP with sites as environments (with the oracle confounder) next to IV-ICP |
+
+A **what-if** panel perturbs the loaded rows in memory — pleiotropic SNPs, a
+site with a deviant effect, an outcome level shift, extra confounding at one
+site — so each analysis can be seen catching (or missing) each violation.
+Nothing on disk changes. Science lives in `sensitivity.py`, figures in
+`charts.py`, the Streamlit layout in `sensitivity_tab.py`.
+
 ## How runs are stored
 
 A run is keyed by a hash of its parameters and written to
