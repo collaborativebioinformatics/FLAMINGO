@@ -84,11 +84,13 @@ def test_quadratic_basis_curve_uses_both_coefficients():
     assert np.allclose(c.f_hi - c.f, 1.96 * np.sqrt((x * 0.01) ** 2 + (x**2 * 0.02) ** 2))
 
 
-def test_shared_protocol_is_linear_only_and_others_are_open():
+def test_shared_protocol_is_linear_only_through_nvflare_and_open_locally():
     shared = {"shared_snps": True}
     assert E.supported(shared, "linear", 0) is None
     assert E.supported(shared, "quadratic", 0)
     assert E.supported(shared, "linear", 5)
+    assert E.supported(shared, "quadratic", 0, engine="local") is None
+    assert E.supported(shared, "linear", 5, engine="local") is None
     assert E.supported({}, "quadratic", 5) is None
     assert E.protocol_name(shared) == "shared" and E.protocol_name({}) == "local"
 

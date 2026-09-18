@@ -47,11 +47,13 @@ def protocol_name(manifest):
     return "shared" if manifest.get("shared_snps") else "local"
 
 
-def supported(manifest, basis, crossfit):
-    """Why this (dataset, basis, crossfit) cannot run, or None if it can. The NVFlare transport
-    (and so this method) runs the shared-instrument protocol with the linear basis only."""
-    if protocol_name(manifest) == "shared" and (basis != "linear" or crossfit):
-        return "the shared-instrument protocol runs with basis=linear and no cross-fit"
+def supported(manifest, basis, crossfit, engine="nvflare"):
+    """Why this (dataset, basis, crossfit, engine) cannot run, or None if it can. The NVFlare
+    transport runs the shared-instrument protocol with the linear basis only (its quadratic and
+    cross-fit variants need a global first stage that fed2sls_client.py does not implement);
+    the local engine runs every variant of both protocols."""
+    if engine == "nvflare" and protocol_name(manifest) == "shared" and (basis != "linear" or crossfit):
+        return "the NVFlare transport runs the shared-instrument protocol with basis=linear and no cross-fit"
     return None
 
 

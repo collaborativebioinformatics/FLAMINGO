@@ -179,7 +179,7 @@ def run_dataset(dataset, method, args):
         if task.name != "continuous":
             reason = "Fed-2SLS needs a continuous Y"
         else:
-            reason = fed2sls_engine.supported(manifest, args.fed2sls_basis, args.fed2sls_crossfit)
+            reason = fed2sls_engine.supported(manifest, args.fed2sls_basis, args.fed2sls_crossfit, args.engine)
         if reason:
             print(f"\n##### {dataset} / fed2sls: skipped, {reason} #####\n", flush=True)
             return

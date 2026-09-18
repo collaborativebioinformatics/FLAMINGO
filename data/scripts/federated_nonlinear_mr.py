@@ -81,8 +81,8 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--federated", type=Path, default=None,
                    help="results/ root of the NVFlare runs (default: ../federated_learning/results)")
-    p.add_argument("--federated_methods", nargs="+", choices=list(FL_STYLE), default=list(FL_STYLE),
-                   help="which federated-learning curves to draw when present (default: all)")
+    p.add_argument("--federated_methods", nargs="*", choices=list(FL_STYLE), default=list(FL_STYLE),
+                   help="which federated-learning curves to draw when present (default: all; pass none to draw no curve)")
     a = p.parse_args()
     a.federated = a.federated or Path(__file__).resolve().parents[2] / "federated_learning" / "results"
     a.sites = a.sites or Path("simulated_data/federated") / a.shape

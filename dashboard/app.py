@@ -257,32 +257,32 @@ def show_outputs(step, params, paths, skip: set | None = None) -> None:
         output_block(step, label, path, paths)
 
 
-def headline_metrics(summary: dict) -> None:
-    """The estimates every run is judged on, from the summary-MR printout."""
+def headline_metrics(summary: dict, federated: dict, models: list) -> None:
+    """The estimates every run is judged on, from the summary-MR printout, for the selected models."""
     if not summary:
         return
     cards = []
-    if "meta_ivw" in summary:
+    if "sumstats" in models and "meta_ivw" in summary:
         est, se = summary["meta_ivw"]
-        cards.append(stat_card("Meta IVW", f"{est:.3f}",
+        cards.append(stat_card("Summary statistics: IVW meta", f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
-    if "pooled" in summary:
-        est, se = summary["pooled"]
-        cards.append(stat_card("Pooled (individual-level)", f"{est:.3f}",
-                               f"95% CI ± {1.96 * se:.3f}", "benchmark"))
-    if "fed2sls" in summary:
+    if "fed2sls" in models and "fed2sls" in summary:
         est, se = summary["fed2sls"][:2]
         cards.append(stat_card("Federated Fed-2SLS", f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
-    if "pooled_naive" in summary:
-        cards.append(stat_card("Pooled naive (no IV)", f"{summary['pooled_naive'][0]:.3f}",
-                               "confounded", "coral"))
-    if "heterogeneity_q" in summary:
+    if "2sri" in models and "2sri" in federated:
+        cards.append(stat_card("Federated Fed-2SRI", f"{federated['2sri'][0]:.3f}",
+                               "slope from the curve, no CI", "pink"))
+    if "pooled" in models and "pooled" in summary:
+        est, se = summary["pooled"]
+        cards.append(stat_card("Concatenated 2SLS", f"{est:.3f}",
+                               f"95% CI ± {1.96 * se:.3f}", "benchmark"))
+    if "sumstats" in models and "heterogeneity_q" in summary:
         cards.append(stat_card("Heterogeneity Q", f"{summary['heterogeneity_q'][0]:.1f}",
                                "across sites", "neutral"))
     stat_row(cards)
 
-    if "pooled_quadratic" in summary:
+    if "pooled" in models and "pooled_quadratic" in summary:
         t1, t1se, t2, t2se = summary["pooled_quadratic"]
         st.dataframe(pl.DataFrame([{"estimator": "Concatenated quadratic 2SLS", "θ1": t1, "θ1 se": t1se,
                                     "θ2": t2, "θ2 se": t2se}]), width="stretch", hide_index=True)
@@ -300,6 +300,7 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
     are benchmarks a real federation could not run.
     """
     curved = params["shape"] in runner.CURVED_SHAPES
+    models = params["models"]
 
     def row(estimator, sees, theta1=None, theta2=None, se1=None):
         return {"estimator": estimator, "sees": sees,
@@ -307,26 +308,23 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
 
     rows = [row("Truth", "simulation parameters", params["theta1"],
                 params.get("theta2") if curved else None)]
-    if "meta_ivw" in summary:
+    if "sumstats" in models and "meta_ivw" in summary:
         est, se = summary["meta_ivw"]
-        rows.append(row("Summary-stat IVW meta", "per-SNP summary statistics", est,
-                        None, se))
-    if curved and "pooled_quadratic" in summary:
-        t1, se1, t2, _ = summary["pooled_quadratic"]
-        rows.append(row("Concatenated quadratic 2SLS", "pooled individual rows", t1, t2, se1))
-    elif "pooled" in summary:
-        est, se = summary["pooled"]
-        rows.append(row("Concatenated 2SLS", "pooled individual rows", est, None, se))
-    if "fed2sls" in summary:
+        rows.append(row(runner.MODELS["sumstats"], "per-SNP summary statistics", est, None, se))
+    if "fed2sls" in models and "fed2sls" in summary:
         v = summary["fed2sls"]
-        rows.append(row(runner.method_label("fed2sls"), "summed sufficient statistics", v[0],
+        rows.append(row(runner.MODELS["fed2sls"], "summed sufficient statistics", v[0],
                         v[2] if len(v) > 2 else None, v[1]))
-    for method, coef in sorted(federated.items()):
-        rows.append(row(runner.method_label(method), "model updates only",
-                        coef[0], coef[1] if len(coef) > 1 else None))
-    if "pooled_naive" in summary:
-        rows.append(row("Pooled naive (no instruments)", "pooled individual rows",
-                        summary["pooled_naive"][0], None))
+    if "2sri" in models and "2sri" in federated:
+        coef = federated["2sri"]
+        rows.append(row(runner.MODELS["2sri"], "model updates only", coef[0], coef[1] if len(coef) > 1 else None))
+    if "pooled" in models:
+        if curved and "pooled_quadratic" in summary:
+            t1, se1, t2, _ = summary["pooled_quadratic"]
+            rows.append(row("Concatenated quadratic 2SLS (benchmark)", "pooled individual rows", t1, t2, se1))
+        elif "pooled" in summary:
+            est, se = summary["pooled"]
+            rows.append(row(runner.MODELS["pooled"], "pooled individual rows", est, None, se))
     return pl.DataFrame(rows, infer_schema_length=None)
 
 
@@ -400,38 +398,34 @@ with tab_experiments:
         run_params = dict(asset["params"])
         run_paths = asset["paths"]
 
-        st.subheader("Federated learning")
+        st.subheader("Models")
         available = runner.fl_available()
         if not available:
             st.warning(
                 f"`{runner.FL_PYTHON}` cannot import torch and NVFlare. Run `uv sync` "
                 "at the repository root, or set `FLAMINGO_FL_PYTHON` to an environment "
-                "that has them. The MR steps below run without it."
+                "that has them. The two federated models are unavailable until then."
             )
-        run_params["run_federated"] = st.checkbox(
-            "Run the federated workflow", value=available, disabled=not available,
-            help="Trains one client per site with FedAvg, then overlays the federated "
-                 "curve on the MR plots below.",
+        offered = [m for m in runner.MODELS if available or m not in runner.FL_METHODS]
+        run_params["models"] = st.multiselect(
+            "Model outputs", offered, default=offered, format_func=lambda m: runner.MODELS[m],
+            help="Concatenated 2SLS: one fit on the pooled rows, the benchmark a real federation cannot run. "
+                 "Summary statistics: per-SNP effects from each site, IVW within site, meta-analysed. "
+                 "Fed-2SLS: exact 2SLS from summed sufficient statistics, no training "
+                 "(continuous outcomes; skipped for cox). "
+                 "Fed-2SRI: site-local first stage, then a control-function network trained with FedAvg.",
         )
-        c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
-        run_params["fl_methods"] = c1.multiselect(
-            "Methods", runner.FL_METHODS, default=runner.EXPERIMENT_DEFAULTS["fl_methods"],
-            disabled=not run_params["run_federated"],
-            help="2sri: site-local first stage, then a federated control-function network trained with FedAvg. "
-                 "fed2sls: exact 2SLS from summed sufficient statistics, no training "
-                 "(continuous outcomes; skipped for cox).",
-        )
+        federated_on = any(m in runner.FL_METHODS for m in run_params["models"])
+        c2, c3, c4 = st.columns([2, 1, 1])
         run_params["fl_engine"] = c2.selectbox(
-            "Engine", ["local", "nvflare"], disabled=not run_params["run_federated"],
-            help="local reproduces FedAvg's arithmetic in-process in seconds; nvflare "
+            "Federated engine", ["local", "nvflare"], disabled=not federated_on,
+            help="local reproduces the federation's arithmetic in-process in seconds; nvflare "
                  "stands up the real simulated federation and costs about 40 s per job.",
         )
         run_params["fl_rounds"] = c3.number_input(
-            "Rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"],
-            disabled=not run_params["run_federated"])
+            "Fed-2SRI rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"], disabled=not federated_on)
         run_params["fl_epochs"] = c4.number_input(
-            "Local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"],
-            disabled=not run_params["run_federated"])
+            "Fed-2SRI local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"], disabled=not federated_on)
 
         steps = runner.steps_for(run_params)
         st.subheader("Run the experiment chain")
@@ -464,7 +458,7 @@ with tab_experiments:
                 st.divider()
 
             st.subheader("Key results")
-            headline_metrics(summary)
+            headline_metrics(summary, federated, run_params["models"])
 
             st.markdown("#### All estimators")
             st.caption("Every row targets the same causal curve; they differ in what "

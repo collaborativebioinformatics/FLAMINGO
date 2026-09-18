@@ -41,7 +41,17 @@ DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 # The repository is one environment, so every step runs in this interpreter.
 # Both overrides remain for pointing a step at a separate environment.
 FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
-FL_METHODS = ("2sri", "fed2sls")
+FL_METHODS = ("2sri", "fed2sls")   # the models that run through federated_learning/job.py
+
+# The four model outputs the experiment tab offers, all on by default. The two
+# federated ones need the job.py step; the other two come from federated_summary_mr.py.
+MODELS = {
+    "pooled": "Concatenated 2SLS (pooled individual rows, benchmark)",
+    "sumstats": "Summary statistics · per-SNP IVW meta-analysis",
+    "fed2sls": "Federated MR · Fed-2SLS (exact 2SLS from summed statistics)",
+    "2sri": "Federated MR · Fed-2SRI (control function, FedAvg-trained)",
+}
+FOREST_ROWS = {"pooled": "pooled", "sumstats": "sumstats", "fed2sls": "fed2sls", "2sri": "federated"}
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
@@ -49,8 +59,7 @@ CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recove
 # Options that change what is run over a dataset, rather than the dataset itself,
 # so they deliberately stay out of the run id.
 EXPERIMENT_DEFAULTS: dict = {
-    "run_federated": True,
-    "fl_methods": ["2sri", "fed2sls"],
+    "models": list(MODELS),
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
@@ -91,6 +100,8 @@ def full(params: dict) -> dict:
     p = canonical(params)
     for key, default in EXPERIMENT_DEFAULTS.items():
         p[key] = params.get(key, default)
+    p["fl_methods"] = [m for m in FL_METHODS if m in p["models"]]   # derived: which models job.py runs
+    p["run_federated"] = bool(p["fl_methods"])
     return p
 
 
@@ -197,6 +208,9 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
     ]
     for method in p["fl_methods"]:
         argv += ["--method", method]
+    if p["shape"] in CURVED_SHAPES:
+        # Fed-2SLS on [X, X^2], so it reports theta2 next to the concatenated quadratic fit
+        argv += ["--fed2sls_basis", "quadratic"]
     return argv
 
 
@@ -222,9 +236,6 @@ def _federated_outputs(p: dict, paths: RunPaths) -> dict:
 
 def _sumstats_stem(p: dict, paths: RunPaths) -> Path:
     return paths.results / f"sumstats.{p['shape']}"
-
-
-NONLINEAR_FL_CURVES = ("2sri",)   # federated curves drawn on the dose-response plot
 
 
 def _nonlinear_png(p: dict, paths: RunPaths) -> Path:
@@ -253,8 +264,9 @@ PIPELINE: tuple[Step, ...] = (
         cwd=FL_DIR,
         argv=_federated_argv,
         outputs=_federated_outputs,
-        signature=lambda p: {k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
-        applies=lambda p: bool(p.get("run_federated")) and bool(p.get("fl_methods")),
+        signature=lambda p: {**{k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
+                             "fed2sls_basis": "quadratic" if p["shape"] in CURVED_SHAPES else "linear"},
+        applies=lambda p: bool(p["fl_methods"]),
     ),
     Step(
         key="summary_mr",
@@ -265,7 +277,9 @@ PIPELINE: tuple[Step, ...] = (
             "--sites", paths.sites_for(p["shape"]),
             "--out", _sumstats_stem(p, paths),
             "--fl-results", paths.fl,
+            "--rows", *[FOREST_ROWS[m] for m in MODELS if m in p["models"]],
         ],
+        signature=lambda p: {"models": [m for m in MODELS if m in p["models"]]},
         outputs=lambda p, paths: {
             "Forest plot": Path(f"{_sumstats_stem(p, paths)}.png"),
             "Per-site estimates": Path(f"{_sumstats_stem(p, paths)}.csv"),
@@ -280,11 +294,12 @@ PIPELINE: tuple[Step, ...] = (
             "--sites", paths.sites_for(p["shape"]),
             "--out", _nonlinear_png(p, paths),
             "--federated", paths.fl,
-            "--federated_methods", *NONLINEAR_FL_CURVES,
+            # the Fed-2SRI curve is the one federated curve on the dose-response plot
+            "--federated_methods", *(["2sri"] if "2sri" in p["models"] else []),
         ],
         outputs=lambda p, paths: {"Dose–response curve": _nonlinear_png(p, paths)},
         applies=lambda p: p["shape"] in CURVED_SHAPES,
-        signature=lambda p: {"federated_methods": list(NONLINEAR_FL_CURVES)},
+        signature=lambda p: {"federated_methods": ["2sri"] if "2sri" in p["models"] else []},
     ),
 )
 
@@ -431,7 +446,6 @@ _NUM = r"(-?\d+\.?\d*)"
 _PATTERNS = {
     "meta_ivw": rf"meta IVW\s+{_NUM}\s+se\s+{_NUM}",
     "pooled": rf"pooled (?:2SLS|2SPS Cox)\s+{_NUM}\s+se\s+{_NUM}",
-    "pooled_naive": rf"pooled naive\s+{_NUM}",
     # `federated Fed-2SLS: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
     "fed2sls": rf"federated Fed-2SLS:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
     "heterogeneity_q": rf"heterogeneity Q\s+{_NUM}",

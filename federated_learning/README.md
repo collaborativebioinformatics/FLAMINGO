@@ -83,7 +83,8 @@ standard errors. Only continuous outcomes; binary and survival sets are
 skipped, and the fedsec configs are refused because there are no model
 updates for them to act on. The protocol follows the manifest: site-local
 first stages by default, the shared-instrument protocol when `shared_snps`
-is set (linear basis only through NVFlare).
+is set (through NVFlare the shared protocol runs the linear basis only; the
+local engine runs every variant).
 
 ```bash
 uv run python job.py --dataset linear --method fed2sls                    # local first stage, 2 rounds

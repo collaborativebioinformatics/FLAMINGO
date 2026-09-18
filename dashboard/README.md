@@ -19,12 +19,14 @@ confounding, survival settings, seed — then shows the resulting site manifest,
 size distribution and a preview of any site's individual-level data.
 
 **2 · Experiments & results** picks one of those datasets, chooses how to run
-the federated workflow over it, runs the chain and compares every estimator:
+the federated workflow over it, runs the chain and compares the selected
+model outputs (concatenated 2SLS, per-SNP summary statistics, Fed-2SLS and
+Fed-2SRI; all four on by default):
 
 | step | script | runs for |
 |---|---|---|
 | Simulate sites | `simulate_federated_sites.py` | all shapes |
-| Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS) | `federated_learning/job.py` | when enabled; Fed-2SLS on continuous shapes |
+| Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS) | `federated_learning/job.py` | when either federated model is selected; Fed-2SLS on continuous shapes |
 | Conventional MR | `federated_summary_mr.py` | all shapes |
 | Non-linear MR | `federated_nonlinear_mr.py` | `quadratic`, `threshold` |
 
