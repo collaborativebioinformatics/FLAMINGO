@@ -72,6 +72,12 @@ The diagram is generated: edit [images/make_pipeline_diagram.py](images/make_pip
 uv run python images/make_pipeline_diagram.py
 ```
 
+# Results
+
+![Primary result - linear model forest showing estimator results across sites and methods, and non-linear dose-response curve.](images/forest_and_dose_response.png)
+
+
+
 # Further Reading
 
 - [In-depth reasoning](indepth_reasoning.md): more detail on the methods and the reasoning behind them.
