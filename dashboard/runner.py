@@ -63,8 +63,10 @@ EXPERIMENT_DEFAULTS: dict = {
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
-    # bootstrap replicates for the Fed-2SRI confidence band (federated_learning/src/bootstrap.py); 0 = off
-    "fl_bootstrap": 200,
+    # bootstrap replicates for the Fed-2SRI confidence band (federated_learning/src/bootstrap.py).
+    # Off by default: each replicate re-trains the federation, so B=200 multiplies the step's time
+    # by about 200. Set B in the experiment tab when the band is wanted.
+    "fl_bootstrap": 0,
 }
 
 DEFAULTS: dict = {
