@@ -109,12 +109,29 @@ Two details are load-bearing:
 ## Theme
 
 The palette in [`.streamlit/config.toml`](.streamlit/config.toml) is taken from
-the pipeline figure in the repository README and from the logo: a pale pink
-page, white cards, rose and coral accents. The figure's legend carries meaning,
-and the key-results cards reuse it — pink for what travels between sites, a
-dashed edge for the benchmark that needs pooled individual rows, coral for the
-confounded estimate. Figures produced by `data/scripts/` keep their own colours,
-since they are the published results.
+the pipeline figure in the repository README and from the logo. The figure's
+legend carries meaning, and the key-results cards reuse it — pink for what
+travels between sites, a dashed edge for the benchmark that needs pooled
+individual rows, coral for the confounded estimate. Figures produced by
+`data/scripts/` keep their own colours, since they are the published results.
+
+Light and dark both ship: `[theme.light]` is the figure's pale pink page and
+white cards, `[theme.dark]` rebuilds the same relationships on the logo's
+near-black plum, and the viewer's browser or OS setting picks between them.
+
+**`.streamlit/config.toml` has to be committed.** Without it Streamlit falls
+back to its own default theme, which follows the browser into dark mode while
+the app's CSS keeps painting light-mode cards — the symptom is unreadable
+headings on a dark page.
+
+Two things follow from Streamlit exposing no theme CSS variables:
+
+- The custom palette is injected from Python in [`app.py`](app.py) (`PALETTES`,
+  `css_for`), keyed on the theme Streamlit reports through `st.context.theme`.
+  A `prefers-color-scheme` media query would be wrong whenever the app's own
+  theme setting disagrees with the OS.
+- Every custom colour must come from a `--fl-*` variable defined in both
+  palettes. A hardcoded colour is exactly what breaks in the other mode.
 
 ## Adding a step
 

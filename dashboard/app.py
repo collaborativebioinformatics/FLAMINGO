@@ -29,16 +29,42 @@ st.set_page_config(page_title="FLAMINGO dashboard", page_icon=str(LOGO), layout=
 # load-bearing rather than decorative: pink is the causal pathway and what
 # travels between sites, coral is what differs per site and the confounding, and
 # a dashed edge marks a benchmark that needs pooled individual rows.
-CSS = """
+# The same relationships in both modes: light is the figure's pale pink page and
+# white cards, dark rebuilds them on the logo's near-black plum. Streamlit 1.64
+# exposes no theme CSS variables, so the active palette is injected from Python
+# using the theme Streamlit reports rather than a prefers-color-scheme guess,
+# which would be wrong whenever the app's own theme setting disagrees with the OS.
+PALETTES = {
+    "light": {
+        "rose": "#d4537e", "coral": "#d85a30", "heading": "#72243e",
+        "border": "#f4c0d1", "coral-tint": "#faece7", "surface": "#ffffff",
+        "ink": "#2c2c2a", "muted": "#6b6a65", "plate-border": "#f4c0d1",
+    },
+    "dark": {
+        "rose": "#e4608f", "coral": "#ee8a5f", "heading": "#f4a9c6",
+        "border": "#4a3740", "coral-tint": "#3a2a26", "surface": "#2b2429",
+        "ink": "#f3e9ed", "muted": "#b5a5ac", "plate-border": "#4a3740",
+    },
+}
+
+
+def active_theme() -> str:
+    """Which palette Streamlit is rendering, falling back to light."""
+    try:
+        return st.context.theme.type or "light"
+    except Exception:
+        return "light"
+
+
+def css_for(theme: str) -> str:
+    variables = "\n".join(f"  --fl-{k}: {v};" for k, v in PALETTES[theme].items())
+    return CSS_TEMPLATE.replace("/* PALETTE */", variables)
+
+
+CSS_TEMPLATE = """
 <style>
 :root {
-  --fl-rose: #d4537e;
-  --fl-coral: #d85a30;
-  --fl-maroon: #72243e;
-  --fl-border: #f4c0d1;
-  --fl-coral-tint: #faece7;
-  --fl-ink: #2c2c2a;
-  --fl-muted: #6b6a65;
+/* PALETTE */
 }
 .fl-header {
   display: flex; align-items: center; gap: 0.7rem;
@@ -47,25 +73,25 @@ CSS = """
 }
 .fl-header img { width: 42px; height: 42px; border-radius: 11px; }
 .fl-header .fl-title {
-  margin: 0; line-height: 1.05; color: var(--fl-maroon);
+  margin: 0; line-height: 1.05; color: var(--fl-heading);
   font-size: 1.45rem !important; font-weight: 800 !important; letter-spacing: 0.02em;
 }
 .fl-header .fl-sub {
   margin: 0.2rem 0 0; color: var(--fl-muted); font-size: 0.72rem !important;
   line-height: 1.25;
 }
-h1, h2, h3 { color: var(--fl-maroon) !important; }
+h1, h2, h3 { color: var(--fl-heading) !important; }
 .stat-row {
   display: grid; gap: 0.75rem; margin: 0.2rem 0 0.9rem;
   grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
 }
 .stat {
-  background: #ffffff; padding: 0.7rem 0.9rem;
+  background: var(--fl-surface); padding: 0.7rem 0.9rem;
   border: 1px solid var(--fl-border); border-left: 4px solid var(--fl-rose);
   border-radius: 10px;
 }
 .stat--coral { border-left-color: var(--fl-coral); background: var(--fl-coral-tint); }
-.stat--benchmark { border-left-style: dashed; border-left-color: var(--fl-maroon); }
+.stat--benchmark { border-left-style: dashed; border-left-color: var(--fl-heading); }
 .stat--neutral { border-left-color: var(--fl-border); }
 .stat__label {
   font-size: 0.75rem !important; font-weight: 600; letter-spacing: 0.02em;
@@ -75,6 +101,13 @@ h1, h2, h3 { color: var(--fl-maroon) !important; }
   font-size: 1.55rem !important; font-weight: 700; line-height: 1.3; color: var(--fl-ink);
 }
 .stat__sub { font-size: 0.78rem !important; color: var(--fl-muted); min-height: 1rem; }
+/* The figures are produced by data/scripts on a white canvas. Giving them an
+   explicit white plate makes them read as figure cards in dark mode instead of
+   glaring rectangles, and changes nothing about the plots themselves. */
+[data-testid="stImage"] img {
+  background: #ffffff; padding: 8px; border-radius: 10px;
+  border: 1px solid var(--fl-plate-border);
+}
 </style>
 """
 
@@ -296,7 +329,7 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
     return pl.DataFrame(rows, infer_schema_length=None)
 
 
-st.markdown(CSS, unsafe_allow_html=True)
+st.markdown(css_for(active_theme()), unsafe_allow_html=True)
 sidebar_header()
 params = sidebar_params()
 paths = runner.paths_for(params)
