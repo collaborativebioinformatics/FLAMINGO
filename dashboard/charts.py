@@ -169,7 +169,9 @@ def funnel(sites: list[str], theta: np.ndarray, se: np.ndarray, fe: float, truth
 
 def heatmap(z: np.ndarray, x: list[str], y: list[str], title: str, diverging: bool = True, zmax: float | None = None,
             hover: str = "%{y} · %{x}<br>z = %{z:.2f}", height: int | None = None, colorbar: str = "",
-            text: np.ndarray | None = None) -> go.Figure:
+            text: np.ndarray | None = None, vsep: float | None = None) -> go.Figure:
+    """vsep draws a vertical rule before the column at that (0-based, fractional) position, to set a
+    summary column apart from the others."""
     if diverging:
         zmax = zmax or float(np.nanmax(np.abs(z))) or 1.0
         scale, zmin = DIVERGING, -zmax
@@ -181,6 +183,8 @@ def heatmap(z: np.ndarray, x: list[str], y: list[str], title: str, diverging: bo
                                text=text, texttemplate="%{text}" if text is not None else None, textfont=dict(size=10)))
     fig.update_yaxes(autorange="reversed", showgrid=False)
     fig.update_xaxes(showgrid=False, side="bottom")
+    if vsep is not None:
+        fig.add_vline(x=vsep, line=dict(color=INK, width=1.5))
     return layout(fig, title, height or max(260, 22 * len(y) + 120), legend=False)
 
 

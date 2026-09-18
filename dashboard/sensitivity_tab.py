@@ -1,6 +1,6 @@
-"""The sensitivity tab: leave-sites-out, regularisation paths, robustness across sites and
-invariance tests, all computed live from per-site sufficient statistics (sensitivity.py) and
-drawn with Plotly (charts.py). Nothing here writes to disk; what-if perturbations live in memory.
+"""The sensitivity tab: leave-sites-out, an overview of the estimators and robustness across
+sites, all computed live from per-site sufficient statistics (sensitivity.py) and drawn with
+Plotly (charts.py). Nothing here writes to disk; what-if perturbations live in memory.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 import streamlit as st
+from scipy import stats as sps
 
 import charts as ch
 import runner
@@ -90,7 +91,7 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
 
     st.markdown("Every estimate on this tab is a function of one small bundle per site — n, column means and the "
                 "site-centred cross products of (Y, X, X², x̂, x̂²) plus G′G and G′(Y, X) — so leaving sites out, "
-                "regularising, re-weighting and testing invariance never touches the rows again. That bundle is what "
+                "re-weighting and comparing sites never touches the rows again. That bundle is what "
                 "a federation exchanges.")
     c1, c2, c3 = st.columns([1.2, 1, 1])
     model = c1.radio("Causal curve fitted", ["linear", "quadratic"], horizontal=True,
@@ -121,14 +122,15 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
     mm = S.minimax(ests, full.theta)
     cert_instr = "snps" if model == "linear" else "basis"
 
-    tabs = st.tabs(["Overview", "Leave sites out", "Regularisation", "Robust across sites", "Invariance & ICP"])
+    drop1 = S.leave_out(sites, model, 1)
+    shifts = np.array([(full.theta[0] - d["theta"][0]) / full.se[0] for d in drop1])
+    worst = int(np.argmax(np.abs(shifts)))
+
+    tabs = st.tabs(["Leave sites out", "Overview", "Robust across sites"])
 
     # ------------------------------------------------------------------ overview
-    with tabs[0]:
+    with tabs[1]:
         cert = S.certificate(sites, model, cert_instr)
-        drop1 = S.leave_out(sites, model, 1)
-        shifts = np.array([(full.theta[0] - d["theta"][0]) / full.se[0] for d in drop1])
-        worst = int(np.argmax(np.abs(shifts)))
         cards = [stat_card("Pooled 2SLS " + names[0], f"{full.theta[0]:.3f}", f"95% CI ± {1.96 * full.se[0]:.3f}", "pink"),
                  stat_card("Truth " + names[0], f"{truth[0]:.3f}" if truth is not None and np.isfinite(truth[0]) else "—",
                            "what the fit targets", "neutral"),
@@ -142,8 +144,6 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
         cards.append(stat_card("I² across sites", f"{100 * het['I2']:.0f}%", f"τ = {het['tau']:.3f}", "neutral"))
         stat_row(cards)
 
-        gam = np.array([np.inf])
-        anchor_inf = S.anchor_path(sites, model, gam)[0]
         kp = S.kclass_path(A, alpha)
         rows = [
             {"label": "pooled 2SLS (site fixed effects)", "theta": full.theta, "se": full.se, "color": ch.IV, "group": "instrumented"},
@@ -155,8 +155,6 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
             {"label": "equal-weight meta-analysis", "theta": equal.theta, "se": equal.se, "color": ch.META, "group": "meta-analysis",
              "symbol": "diamond"},
             {"label": "minimax over sites (Chebyshev centre)", "theta": mm, "se": np.zeros_like(mm), "color": ch.MINIMAX,
-             "group": "robust", "symbol": "square"},
-            {"label": "anchor γ→∞ (between-site regression)", "theta": anchor_inf, "se": np.zeros_like(anchor_inf), "color": ch.ANCHOR,
              "group": "robust", "symbol": "square"},
             {"label": "PULSE" + (" (test rejects even 2SLS)" if kp["pulse_rejected"] else ""), "theta": kp["marks"]["PULSE"][1],
              "se": np.zeros(len(names)), "color": ch.PULSE, "group": "K-class", "symbol": "triangle-up"},
@@ -180,7 +178,7 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
                    "invariance across environments is what the instruments buy.")
 
     # --------------------------------------------------------------- leave out
-    with tabs[1]:
+    with tabs[0]:
         st.markdown("#### Drop one site")
         rows = [{"label": f"− {d['dropped'][0]}", "theta": d["theta"], "se": d["se"], "color": ch.IV,
                  "hover": f"n left {d['n']:,}"} for d in drop1]
@@ -227,14 +225,9 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
                   "se": np.array([het["re_se"]] + list(ivw.se[1:])), "color": ch.META, "symbol": "diamond", "size": 12, "group": "combined"},
                  {"label": "pooled 2SLS", "theta": full.theta, "se": full.se, "color": ch.INK, "symbol": "square", "size": 11, "group": "combined"}]
         _plot(ch.forest(rows, names, truth, None, "Per-site estimates and the combined rows"))
-        c1, c2 = st.columns(2)
-        with c1:
-            _plot(ch.funnel(ids, np.array([e.theta[0] for e in ests]), np.array([e.se[0] for e in ests]), het["fe"],
-                            truth[0] if truth is not None else None, names[0], "Funnel: precision against estimate"))
-        with c2:
-            z = S.pairwise_z(ests, 0)
-            _plot(ch.heatmap(z, ids, ids, f"Pairwise disagreement in {names[0]} (z of the difference)", zmax=4,
-                             hover="%{y} − %{x}<br>z = %{z:.2f}", colorbar="z"))
+        _plot(ch.funnel(ids, np.array([e.theta[0] for e in ests]), np.array([e.se[0] for e in ests]), het["fe"],
+                        truth[0] if truth is not None else None, names[0], "Funnel: precision against estimate"))
+        st.caption("Which sites disagree with which, and with the joint model, is on the Robust across sites tab.")
 
         st.markdown("#### Weak-instrument filter")
         f_min = st.slider("Keep sites with mean per-SNP F at least", 0.0, float(np.ceil(F_arr.max())), 0.0, 1.0)
@@ -247,56 +240,41 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
         else:
             st.info("No site passes that threshold.")
 
-    # ----------------------------------------------------------- regularisation
-    with tabs[2]:
-        st.markdown("#### K-class path: OLS → PULSE → 2SLS → LIML")
-        st.markdown("The K-class family interpolates the confounded OLS fit (κ = 0) and 2SLS (κ = 1) and continues to LIML. "
-                    "The **PULSE** (Jakobsen & Peters 2022) stops at the smallest κ whose residuals still pass the instrument test: "
-                    "the least instrumenting the data can justify. Everything comes from the pooled cross products.")
-        instr_opts = ["basis (x̂, x̂²)" if model == "quadratic" else "basis (x̂)"] + (["all SNPs (over-identified)"] if model == "linear" else [])
-        instr_choice = st.radio("Instrument set", instr_opts, horizontal=True, key="kc_instr")
-        A_k = S.aggregate(sites, model, "snps") if instr_choice.startswith("all") else A
-        kp = S.kclass_path(A_k, alpha)
-        _plot(ch.kclass(kp, names, truth))
-        marks = kp["marks"]
-        st.dataframe(pl.DataFrame([{"estimator": k, "κ": float(v[0]), **{n: float(v[1][j]) for j, n in enumerate(names)},
-                                    "test statistic": float(v[2])} for k, v in marks.items()]), width="stretch", hide_index=True)
-        if kp["pulse_rejected"]:
-            st.caption(f"The instrument test rejects along the whole path (critical value {kp['crit']:.1f} on {kp['df']} df), "
-                       "so the PULSE falls back to 2SLS. With SNP instruments this is the pooled Sargan test; see the certificate tab.")
-
-        st.markdown("#### Ridge on the second stage")
-        lambdas = np.logspace(-3, 1.5, 60)
-        rp = S.ridge_path(A, lambdas)
-        _plot(ch.path(lambdas, rp, names, truth, "λ (relative to the instrument signal)",
-                      "Ridge-penalised 2SLS: shrinking θ towards 0", ref=full.theta, ref_label="2SLS"))
-        st.caption("With a quadratic curve the curvature θ2 is the first to go: it is the less well identified direction.")
-
-        st.markdown("#### Re-weighting the sites")
-        powers = np.linspace(0, 1.5, 31)
-        pw = np.array([S.ivw_meta(ests, float(a)).theta for a in powers])
-        pw_se = np.array([S.ivw_meta(ests, float(a)).se for a in powers])
-        _plot(ch.path(powers, pw, names, truth, "weight exponent a (0 = equal sites, 1 = inverse variance)",
-                      "Meta-analysis with weights ∝ precision^a", logx=False, ref=ivw.theta, ref_label="IVW"))
-        st.caption("Inverse-variance weighting lets the biggest, best-instrumented sites dominate; a = 0 gives every biobank one vote.")
-
     # ------------------------------------------------------------- robust
-    with tabs[3]:
-        st.markdown("#### Anchor regression with the site as anchor")
-        st.markdown("Rothenhäusler et al. (2021): minimise the within-site residual sum of squares plus γ times the between-site "
-                    "part. γ = 0 is the site-fixed-effects fit (the pooled 2SLS above), γ = 1 pools everyone with one intercept, "
-                    "γ → ∞ regresses site means on site means and is the estimate most protected against shift interventions on the site. "
-                    "Shown for the instrumented second stage and for the naive regression.")
-        gammas = np.concatenate([[1e-3], np.logspace(-2, 3, 60)])
-        an_iv = S.anchor_path(sites, model, gammas, iv=True)
-        an_ols = S.anchor_path(sites, model, gammas, iv=False)
-        inf_iv = S.anchor_path(sites, model, np.array([np.inf]), iv=True)[0]
-        _plot(ch.path(gammas, an_iv, names, truth, "γ", "Anchored 2SLS (solid) and anchored naive regression (dotted)",
-                      color=ch.ANCHOR, extra={"naive, anchored": (ch.NAIVE, an_ols)},
-                      marks={"γ = 1 (one intercept)": (1.0, an_iv[np.argmin(np.abs(gammas - 1))], ch.ANCHOR),
-                             "γ → ∞ (between sites)": (gammas[-1], inf_iv, ch.INK)}))
-        st.caption("In this simulation the sites share E[X] = 0, so the between-site regression rests on a handful of noisy site "
-                   "means and the path only moves at large γ. Inject an outcome level shift at one site (what-if) and the path bends.")
+    with tabs[2]:
+        st.markdown("#### Which sites disagree, and with whom")
+        st.markdown("Fit the **joint model** to the whole federation at once: site intercepts, one causal slope per site and, "
+                    "by default, one error variance for everyone. It puts every site's slope on a common noise scale and gives, "
+                    "for each site, the Wald test of its slope against the slope fitted on all the *other* sites — the site × X "
+                    "interaction. That test is the last column; the cells to its left compare pairs of sites on the same scale.")
+        scale_choice = st.radio("Noise scale", ["joint model (one σ² for the federation)", "each site's own σ² (meta-analysis view)"],
+                                horizontal=True, key="rob_scale")
+        dis = S.site_disagreement(sites, model, scale="site" if scale_choice.startswith("each") else "joint")
+        K = len(sites)
+        crit = float(sps.norm.ppf(1 - alpha / (2 * K)))
+        zj = dis["z_joint"][:, 0]
+        top = int(np.nanargmax(np.abs(zj)))
+        flagged = int(np.sum(np.abs(dis["z_joint"]) > crit))
+        sd_site = np.sqrt(dis["sigma2_site"])
+        stat_row([stat_card("Most deviant site", ids[top], f"z = {zj[top]:+.2f} against the joint fit of the others",
+                            "coral" if abs(zj[top]) > crit else "neutral"),
+                  stat_card("Sites flagged", f"{flagged} / {K}", f"|z| > {crit:.2f} · α = {alpha:g}, Bonferroni over sites",
+                            "coral" if flagged else "neutral"),
+                  stat_card("Equal slopes test", _pvalue(dis["p"]), f"joint model · Q {dis['Q']:.1f} on {dis['df']} df",
+                            "coral" if dis["p"] < alpha else "neutral"),
+                  stat_card("Residual sd", f"{np.sqrt(dis['sigma2']):.3f}", f"joint · sites range {sd_site.min():.3f}–{sd_site.max():.3f}",
+                            "neutral")])
+        for j, nm in enumerate(names):
+            z = np.concatenate([dis["z_pair"][:, :, j], dis["z_joint"][:, [j]]], axis=1)
+            z[np.arange(K), np.arange(K)] = np.nan
+            text = np.where(np.isfinite(z), np.vectorize(lambda v: f"{v:+.1f}")(np.nan_to_num(z)), "")
+            _plot(ch.heatmap(z, ids + ["joint model"], ids, f"Disagreement in {nm}: z of the row site minus the column", zmax=4,
+                             hover="%{y} − %{x}<br>z = %{z:.2f}", colorbar="z", text=text, height=max(420, 40 * K + 160),
+                             vsep=K - 0.5))
+        st.caption("A row coloured all the way across is a site the federation disagrees with; one off-colour cell is a pair. "
+                   "Give one site a deviant slope (what-if) and its row lights up, ending in the joint-model column. Give it extra "
+                   "confounding instead and its own σ² inflates: on its own scale the site looks agreeable, on the joint scale it does not "
+                   "get to hide behind its noise — switch the scale to compare.")
 
         st.markdown("#### The estimate no site objects to")
         st.markdown("Each site's Wald statistic z²(θ) says how surprised it is by a candidate θ. The pooled 2SLS minimises the "
@@ -326,7 +304,7 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
                      width="stretch", hide_index=True)
         st.caption("Robust across sites is not the same as robust to a bad site: give one site a deviant effect (what-if) and the "
                    "minimax estimate moves towards it, because leaving that site unhappy is exactly what it refuses to do. "
-                   "The between-site certificate on the invariance tab is the tool that names the site instead.")
+                   "The joint-model heatmap above is the tool that names the site instead.")
 
         st.markdown("#### V-REx: equalise the sites' excess risk")
         st.markdown("Krueger et al. (2021): mean excess risk across sites plus λ times its variance. The excess risk is each "
@@ -338,91 +316,3 @@ def render(params: dict, paths: runner.RunPaths, stat_card, stat_row) -> None:
                       color=ch.VREX, ref=full.theta, ref_label="2SLS"))
         st.caption("For the quadratic curve λ → 0 is the stacked second stage (one instrument block per site), which sits a little "
                    "off the pooled 2SLS. Like the minimax estimate, V-REx accommodates a deviant site rather than exposing it.")
-
-    # ----------------------------------------------------------- invariance
-    with tabs[4]:
-        st.markdown("#### The cross-site validity certificate")
-        st.markdown("Stack every site's IV moment conditions and fit one θ by GMM. The over-identification statistic J splits exactly "
-                    "into a **within-site** part (each site's own Sargan test: are its instruments valid?) and a **between-site** part "
-                    "(do all sites agree on θ?). Both are functions of the per-site statistics only.")
-        cert_choice = st.radio("Instruments", ["all SNPs at each site"] + (["basis (x̂, x̂²): between-site part only"] if model == "quadratic" else []),
-                               horizontal=True, key="cert_instr")
-        cert = S.certificate(sites, model, "snps" if cert_choice.startswith("all") else "basis")
-        stat_row([stat_card("Overall J", f"{cert['J']:.1f}", f"{cert['df']} df · p = {_pvalue(cert['p'])}",
-                            "coral" if cert["p"] < alpha else "pink"),
-                  stat_card("Within sites", f"{cert['within']:.1f}", f"{cert['df_within']} df · p = {_pvalue(cert['p_within'])}",
-                            "coral" if cert["p_within"] < alpha else "neutral"),
-                  stat_card("Between sites", f"{cert['between']:.1f}", f"{cert['df_between']} df · p = {_pvalue(cert['p_between'])}",
-                            "coral" if cert["p_between"] < alpha else "neutral"),
-                  stat_card("GMM θ", _fmt(cert["theta"], np.sqrt(np.diag(cert["cov"]))), "precision-weighted site estimates", "pink")])
-        _plot(ch.certificate(cert))
-        if model == "quadratic" and cert_choice.startswith("all"):
-            st.caption("X² is instrumented by the SNPs' linear effects here, which is weak; the (x̂, x̂²) basis is just-identified and "
-                       "leaves only the between-site part.")
-
-        st.markdown("#### Invariant instruments: sites as environments")
-        st.markdown("A valid SNP has the same causal ratio βy/βx at every site. A pleiotropic SNP with direct effect α has ratio "
-                    "θ + α/βx, which moves with the site's βx — so disagreement between sites flags it even when no single site can. "
-                    "Below, z is each (site, SNP) deviation from βy = θ·βx, and T_j sums z² over sites. The greedy search removes the "
-                    "SNP the sites disagree about most until the stacked J test accepts: the ICP-style largest accepted instrument set. "
-                    "SNP *j* is treated as the same variant at every site, as it would be with real rsIDs.")
-        A_lin = S.aggregate(sites, "linear", "snps")
-        theta_lin = float(S.two_sls(A_lin).theta[0])
-        inv = S.snp_invariance(sites, theta_lin)
-        search = S.invariant_instrument_search(sites, alpha)
-        injected = list(pert.pleio_snps) if pert.pleio_alpha else []
-        stat_row([stat_card("SNPs kept", f"{len(search['accepted'])} / {inv['z'].shape[1]}",
-                            "largest accepted set (greedy)" if search["is_accepted"] else "search stopped, set not accepted",
-                            "pink" if search["is_accepted"] else "coral"),
-                  stat_card("Removed", ", ".join(f"snp{j}" for j in search["removed"]) or "none",
-                            ("injected: " + ", ".join(f"snp{j}" for j in injected)) if injected else "no pleiotropy injected",
-                            "coral" if search["removed"] else "neutral"),
-                  stat_card("θ on the final set", f"{search['path'][-1]['theta']:.3f}", f"± {1.96 * search['path'][-1]['se']:.3f} · p = {_pvalue(search['path'][-1]['p'])}", "pink")])
-        if search["reason"]:
-            st.info(f"Search stopped: {search['reason']}. A rejection that singles out no SNP is also what a chance rejection "
-                    f"looks like: on a clean federation the stacked J test rejects at the nominal rate, and this draw of the "
-                    f"committed data happens to sit at p ≈ 0.01 within sites.", icon="ℹ️")
-        c1, c2 = st.columns([1.3, 1])
-        with c1:
-            _plot(ch.heatmap(inv["z"], [f"snp{j}" for j in range(inv["z"].shape[1])], ids,
-                             f"Deviation from βy = θ·βx per site and SNP (θ = {theta_lin:.3f})", zmax=4,
-                             hover="%{y} · %{x}<br>z = %{z:.2f}", colorbar="z"))
-        with c2:
-            _plot(ch.snp_bars(inv["T"], inv["crit"], search["removed"], injected, "Summed disagreement per SNP"))
-        _plot(ch.search_path(search["path"], truth_for_linear(sites, manifest), "θ (linear, SNP instruments)"))
-
-        st.markdown("#### Invariant causal prediction with sites as environments")
-        st.markdown("**Classic ICP** (Peters, Bühlmann & Meinshausen 2016) regresses Y on candidate predictor sets and keeps the sets "
-                    "whose residuals are invariant across sites (a Chow test on the coefficients and an F test on the variances, "
-                    "per site against the rest, Bonferroni over sites). Here the candidates include the oracle confounder U. "
-                    "**IV-ICP** replaces the regression with the pooled 2SLS and tests, per site, that the structural residual is "
-                    "orthogonal to (x̂, x̂²): hidden confounding may differ between sites, only the causal curve must be invariant.")
-        icp = S.classic_icp(sites, alpha=alpha)
-        ivicp = S.iv_icp(sites, alpha=alpha)
-        c1, c2 = st.columns(2)
-        with c1:
-            stat_row([stat_card("Classic ICP output", _set_label(icp["parents"]),
-                                "intersection of accepted sets" if icp["parents"] is not None else "no set is invariant", "coral" if not icp["parents"] else "pink")])
-            _plot(ch.icp_heatmap(icp["results"], ids, "Classic ICP: −log10 p per candidate set and site"))
-            st.caption("The confounder's effect on Y (γy) differs between sites in this simulation, so even Y | X, U is not invariant "
-                       "and classic ICP finds nothing — sites are the wrong environments for a regression that cannot see the instruments.")
-        with c2:
-            stat_row([stat_card("IV-ICP output", _set_label(ivicp["parents"]),
-                                "intersection of accepted sets" if ivicp["parents"] is not None else "no set is invariant",
-                                "pink" if ivicp["parents"] else "coral")])
-            _plot(ch.icp_heatmap(ivicp["results"], ids, "IV-ICP: −log10 p per candidate curve and site"))
-            st.dataframe(pl.DataFrame([{"curve": " + ".join(r["set"]), "θ": _fmt(r["theta"], r["se"]), "p (Bonferroni)": r["p"],
-                                        "accepted": r["accepted"]} for r in ivicp["results"]]), width="stretch", hide_index=True)
-            st.caption("With a quadratic truth the linear curve leaves curvature in the residual, which the x̂² moment picks up at "
-                       "every site; the quadratic curve is accepted. Under a linear truth both are accepted and the intersection is {X}.")
-
-
-def truth_for_linear(sites, manifest):
-    t = S.truth_for(sites, manifest, "linear")
-    return float(t[0]) if t is not None else None
-
-
-def _set_label(parents) -> str:
-    if parents is None:
-        return "no accepted set"
-    return "{ " + ", ".join(sorted(parents)) + " }" if parents else "∅"

@@ -374,6 +374,44 @@ def pairwise_z(ests: list[Estimate], component: int = 0) -> np.ndarray:
     return (y[:, None] - y[None, :]) / np.sqrt(v[:, None] + v[None, :])
 
 
+def site_disagreement(sites: list[SiteStats], model: str, instr: str = "basis", scale: str = "joint") -> dict:
+    """Disagreement z-scores from the joint 2SLS model: site intercepts, one slope vector per site,
+    one instrument block per site and (scale="joint") a single error variance for the federation.
+
+    The joint model's estimate of the common slope is the precision-weighted mean of the site slopes
+    with precisions W_e'P_e W_e / sigma^2, and
+      z_joint[e]    compares site e with the joint fit of every *other* site: the Wald z of the
+                    site x X interaction. The two fits use disjoint rows, so their variances add.
+      z_pair[e, f]  compares two sites on the same noise scale (row minus column).
+      Q             tests that every site shares the joint slope, chi^2 on (K - 1) p df.
+    scale="site" uses each site's own residual variance instead, which is the meta-analysis view:
+    a site whose noise is inflated then buys itself a smaller z.
+    """
+    aggs = [aggregate([s], model, instr) for s in sites]
+    thetas = np.array([_solve(A.WPW, A.WPy) for A in aggs])
+    K, p = thetas.shape
+    n = sum(A.n for A in aggs)
+    sigma2_joint = sum(A.rss(t) for A, t in zip(aggs, thetas)) / max(n - K - K * p, 1)
+    sigma2_site = np.array([A.rss(t) / max(A.n - 1 - p, 1) for A, t in zip(aggs, thetas)])
+    s2 = sigma2_site if scale == "site" else np.full(K, sigma2_joint)
+    P = [A.WPW / v for A, v in zip(aggs, s2)]                       # per-site precisions on the chosen scale
+    var = np.array([np.diag(_inv(Pe)) for Pe in P])                 # K x p
+    z_pair = (thetas[:, None, :] - thetas[None, :, :]) / np.sqrt(var[:, None, :] + var[None, :, :])
+    z_joint = np.full((K, p), np.nan)
+    if K >= 2:
+        for e in range(K):
+            Pr = sum(P[f] for f in range(K) if f != e)
+            Vr = _inv(Pr)
+            tr = Vr @ sum(P[f] @ thetas[f] for f in range(K) if f != e)
+            z_joint[e] = (thetas[e] - tr) / np.sqrt(var[e] + np.diag(Vr))
+    Vj = _inv(sum(P)); theta_joint = Vj @ sum(Pe @ t for Pe, t in zip(P, thetas))
+    Q = float(sum((t - theta_joint) @ Pe @ (t - theta_joint) for Pe, t in zip(P, thetas)))
+    df = (K - 1) * p
+    return {"theta": thetas, "theta_joint": theta_joint, "se_joint": np.sqrt(np.diag(Vj)), "z_pair": z_pair, "z_joint": z_joint,
+            "sigma2": sigma2_joint, "sigma2_site": sigma2_site, "Q": Q, "df": df,
+            "p": float(sps.chi2.sf(Q, df)) if df > 0 else np.nan}
+
+
 # ------------------------------------------------------------- subsets of sites
 
 

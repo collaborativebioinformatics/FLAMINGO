@@ -60,11 +60,9 @@ a continuous outcome only (linear, quadratic, threshold).
 
 | sub-tab | what it shows |
 |---|---|
-| Overview | every estimator on one forest (pooled 2SLS, IVW / random-effects / equal-weight meta-analysis, minimax, anchor γ→∞, PULSE, LIML, naive); naive vs 2SLS slope per site |
-| Leave sites out | drop-1 forest, influence bubbles (IV vs naive), leave-k-out distributions, cumulative meta-analysis in a chosen order, per-site forest with FE/RE and prediction interval, funnel, pairwise disagreement, weak-instrument filter |
-| Regularisation | K-class path OLS → PULSE → 2SLS → LIML with the instrument test along it, ridge on the second stage, site re-weighting by precision^a |
-| Robust across sites | anchor regression with the site as anchor (γ path, IV and naive), the minimax estimate no site objects to (Wald fan or contour), V-REx path |
-| Invariance & ICP | GMM validity certificate split into within-site (instrument validity) and between-site (same θ) parts; per-SNP cross-site invariance heatmap and greedy invariant-instrument search; classic ICP with sites as environments (with the oracle confounder) next to IV-ICP |
+| Leave sites out | drop-1 forest, influence bubbles (IV vs naive), leave-k-out distributions, cumulative meta-analysis in a chosen order, per-site forest with FE/RE and prediction interval, funnel, weak-instrument filter |
+| Overview | every estimator on one forest (pooled 2SLS, IVW / random-effects / equal-weight meta-analysis, minimax, PULSE, LIML, naive); naive vs 2SLS slope per site |
+| Robust across sites | the disagreement heatmap from the joint model (site intercepts, one slope per site, one σ²): pairwise z between sites plus, per site, the Wald z of its slope against the joint fit of all other sites, with a toggle to each site's own σ²; the minimax estimate no site objects to (Wald fan or contour); V-REx path |
 
 A **what-if** panel perturbs the loaded rows in memory — pleiotropic SNPs, a
 site with a deviant effect, an outcome level shift, extra confounding at one
