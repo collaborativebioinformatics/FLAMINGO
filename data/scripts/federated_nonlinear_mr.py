@@ -39,8 +39,8 @@ from simulate_basic import causal_curve  # noqa: E402
 import mr_style as S  # noqa: E402  one look per estimator across every figure in the repo
 
 POOLED_COLOR, SUMSTATS_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = S.BLUE, S.ORANGE, S.VIOLET, S.INK, S.MUTED, S.GRID
-FL_STYLE = {"naive": (S.NAIVE, "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
-            "2sri": (S.FED2SRI, "federated Fed-2SRI (FedAvg-trained network): f(X), first-stage residual as control function")}
+FL_STYLE = {"naive": (S.NAIVE, f"{S.NAME['naive']} (federated, no instruments)"),
+            "2sri": (S.FED2SRI, S.NAME["2sri"])}
 
 
 def load_sites(folder: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -124,12 +124,12 @@ def main() -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
     ax.fill_between(x, fit - 1.96 * fit_se, fit + 1.96 * fit_se, color=POOLED_COLOR, alpha=0.18, linewidth=0)
-    ax.plot(x, truth, **S.line(S.TRUTH), label=f"true curve ({a.shape}, θ1={t1}, θ2={t2})")
+    ax.plot(x, truth, **S.line(S.TRUTH), label=f"{S.NAME['truth']}  θ1={t1}, θ2={t2}")
     ax.plot(x, fit, **S.line(S.CONCATENATED),
-            label=f"concatenated: quadratic 2SLS  θ1={theta[0]:.2f}, θ2={theta[1]:.2f} (95% band)")
-    ax.plot(x, line, **S.line(S.SUMSTATS), label=f"sumstats: linear IVW  slope={slope:.2f}")
+            label=f"{S.NAME['pooled']}  θ1={theta[0]:.2f}, θ2={theta[1]:.2f} (95% band)")
+    ax.plot(x, line, **S.line(S.SUMSTATS), label=f"{S.NAME['sumstats']}  slope={slope:.2f}")
     ax.plot(x, basis @ fm_theta, **S.line(S.FED2SLS),
-            label=f"federated: Fed-2SLS sufficient statistics, identical to concatenated (|Δθ| = {fm_diff:.0e})")
+            label=f"{S.NAME['fed2sls']}  θ1={fm_theta[0]:.2f}, θ2={fm_theta[1]:.2f} (|Δθ| vs concatenated {fm_diff:.0e})")
     for m, (style, label) in FL_STYLE.items():
         if m not in fl:
             continue
@@ -141,7 +141,7 @@ def main() -> None:
         if band is not None:
             ax.fill_between(x, band[0], band[1], color=style["color"], alpha=0.14, linewidth=0)
         ax.plot(x, fl[m][0], **S.line(style),
-                label=f"{label}, round {fl[m][1]}" + ("\n    shaded: pointwise 95% bootstrap band" if band is not None else ""))
+                label=f"{label}, round {fl[m][1]}" + (" (95% bootstrap band)" if band is not None else ""))
         print(f"federated {m} curve:          from {a.federated / m / a.shape}")
     X_all = np.concatenate([s[1] for s in sites])
     ax2 = ax.twinx()
@@ -151,7 +151,7 @@ def main() -> None:
     ax.set_zorder(ax2.get_zorder() + 1); ax.patch.set_visible(False)
     ax.set_xlabel("exposure X (standardised)")
     ax.set_ylabel("causal effect on Y, relative to X = 0")
-    ax.set_title(f"{a.shape} model: recovering the dose-response curve (n = {len(X_all):,}, {len(sites)} sites)",
+    ax.set_title(f"{a.shape} model: dose-response curve (n = {len(X_all):,}, {len(sites)} sites)",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, loc="upper left", fontsize=9)
     for s in ("top", "right"):

@@ -189,35 +189,35 @@ def forest(res, meta, meta_se, pooled, pooled_se, fl, target, target_label, shap
     ax.axvline(target, color=INK, linewidth=1.2, linestyle="--")
     ax.errorbar(res["ivw"], y, xerr=1.96 * res["ivw_se"], fmt="o", color=SITE_COLOR, ms=6,
                 ecolor=SITE_COLOR, elinewidth=2, capsize=0, label="site IVW (95% CI)")
-    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="naive fit (no instruments)", zorder=3)
+    ax.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, label="site naive (no instruments)",
+               zorder=3)
     if "sumstats" in rows_y:
         ax.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
-                    ecolor=SUMSTATS_COLOR, elinewidth=3, label="sumstats: meta-analysis of site IVW")
+                    ecolor=SUMSTATS_COLOR, elinewidth=3, label=f"{S.NAME['sumstats']} (95% CI)")
     if "federated" in rows_y:
         if "2sri" in fl:
-            _fl_marker(ax, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0,
-                       "federated: Fed-2SRI, FedAvg global model")
+            _fl_marker(ax, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0, S.NAME["2sri"])
         else:
             ax.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax.get_yaxis_transform(),
                     ha="center", va="center", fontsize=9, color=FED_COLOR, style="italic")
     if "fed2sls" in rows_y:
         if fed2sls is not None:
             ax.errorbar([fed2sls[0]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[1]], fmt="v", color=FED2SLS_COLOR,
-                        ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label="federated: Fed-2SLS, exact pooled 2SLS (95% CI)")
+                        ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label=f"{S.NAME['fed2sls']} (95% CI)")
         else:
             ax.text(0.5, rows_y["fed2sls"], "no Fed-2SLS run for this dataset", transform=ax.get_yaxis_transform(),
                     ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
     if "pooled" in rows_y:
-        pooled_label = "concatenated: one stratified 2SPS Cox" if shape == "cox" else "concatenated: one pooled 2SLS"
+        pooled_label = ("Concatenated 2SPS Cox (95% CI)" if shape == "cox" else f"{S.NAME['pooled']} (95% CI)")
         ax.errorbar([pooled], [rows_y["pooled"]], xerr=[1.96 * pooled_se], fmt="s", color=POOLED_COLOR, ms=7,
                     ecolor=POOLED_COLOR, elinewidth=3, label=pooled_label)
     if rows_y:
         ax.axhline(-0.4, color=GRID, linewidth=0.8)
     _family_rows(ax, y, rows_y, res, res["n"].sum(),
-                 {"sumstats": "sumstats", "federated": "federated: Fed-2SRI", "fed2sls": "federated: Fed-2SLS",
-                  "pooled": "concatenated"})
+                 {"sumstats": S.NAME["sumstats"], "federated": S.NAME["2sri"], "fed2sls": S.NAME["fed2sls"],
+                  "pooled": S.NAME["pooled"]})
     ax.set_xlabel("estimated log hazard ratio per unit X" if shape == "cox" else "estimated causal effect of X on Y")
-    ax.set_title(f"{shape} model: sumstats vs federated vs concatenated\ndashed line: {target_label}",
+    ax.set_title(f"{shape} model: estimates by site and by model\ndashed line: {target_label}",
                  loc="left", fontsize=11, color=INK)
     ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, fontsize=9)
     _style(ax)
@@ -351,20 +351,19 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
     if abs(avg_slope_target - theta1) > 0.01:
         ax1.axvline(avg_slope_target, color=MUTED, linewidth=1.2, linestyle=":")
     ax1.errorbar(res["q_theta1"], y, xerr=1.96 * res["q_theta1_se"], fmt="o", color=SITE_COLOR, ms=6,
-                 ecolor=SITE_COLOR, elinewidth=2, label="site model: local quadratic 2SLS (95% CI)")
+                 ecolor=SITE_COLOR, elinewidth=2, label="site quadratic 2SLS (95% CI)")
     ax1.scatter(res["ivw"], y, marker="o", s=34, facecolor="white", edgecolor=SUMSTATS_COLOR, linewidths=1.6, zorder=4,
-                label="site per-SNP IVW (average slope)")
-    ax1.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, zorder=3, label="naive fit (no instruments)")
+                label="site IVW (average slope)")
+    ax1.scatter(res["naive_ols"], y, marker="|", s=120, color=MUTED, linewidths=2, zorder=3, label="site naive (no instruments)")
     if "sumstats" in rows_y:
         ax1.errorbar([meta], [rows_y["sumstats"]], xerr=[1.96 * meta_se], fmt="D", color=SUMSTATS_COLOR, ms=8,
-                     ecolor=SUMSTATS_COLOR, elinewidth=3, label="per-SNP sumstats: meta of site IVW")
+                     ecolor=SUMSTATS_COLOR, elinewidth=3, label=f"{S.NAME['sumstats']} (95% CI)")
         ax2.text(0.5, rows_y["sumstats"], "not identifiable from per-SNP summary statistics",
                  transform=ax2.get_yaxis_transform(), ha="center", va="center", fontsize=9, color=SUMSTATS_COLOR,
                  style="italic")
     if "federated" in rows_y:
         if "2sri" in fl:
-            _fl_marker(ax1, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0,
-                       "federated: Fed-2SRI, FedAvg global model")
+            _fl_marker(ax1, fl["2sri"][0], rows_y["federated"], fl_ci_.get("2sri"), 0, S.NAME["2sri"])
             _fl_marker(ax2, fl["2sri"][1], rows_y["federated"], fl_ci_.get("2sri"), 1, None)
         else:
             ax1.text(0.5, rows_y["federated"], "no Fed-2SRI run for this dataset", transform=ax1.get_yaxis_transform(),
@@ -372,7 +371,7 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
     if "fed2sls" in rows_y:
         if fed2sls is not None:
             ax1.errorbar([fed2sls[0]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[1]], fmt="v", color=FED2SLS_COLOR,
-                         ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label="federated: Fed-2SLS, exact pooled 2SLS (95% CI)")
+                         ms=8, ecolor=FED2SLS_COLOR, elinewidth=3, label=f"{S.NAME['fed2sls']} (95% CI)")
             if fed2sls[2] is not None:     # a linear-basis run has no theta2
                 ax2.errorbar([fed2sls[2]], [rows_y["fed2sls"]], xerr=[1.96 * fed2sls[3]], fmt="v",
                              color=FED2SLS_COLOR, ms=8, ecolor=FED2SLS_COLOR, elinewidth=3)
@@ -381,7 +380,7 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
                      ha="center", va="center", fontsize=9, color=FED2SLS_COLOR, style="italic")
     if "pooled" in rows_y:
         ax1.errorbar([pooled_q[0]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[0, 0])], fmt="s",
-                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3, label="concatenated: one quadratic 2SLS")
+                     color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3, label=f"{S.NAME['pooled']} (95% CI)")
         ax2.errorbar([pooled_q[1]], [rows_y["pooled"]], xerr=[1.96 * np.sqrt(pooled_cov[1, 1])], fmt="s",
                      color=POOLED_COLOR, ms=7, ecolor=POOLED_COLOR, elinewidth=3)
     ax1.set_xlabel("θ1: slope at X = 0")
@@ -404,10 +403,9 @@ def forest_curved(res, meta, meta_se, pooled_q, pooled_cov, fl,
         if rows_y:
             ax.axhline(-0.4, color=GRID, linewidth=0.8)
         _style(ax)
-    _family_rows(ax1, y, rows_y, res, n_all, {"sumstats": "sumstats: per-SNP",
-                                              "federated": "federated: Fed-2SRI", "fed2sls": "federated: Fed-2SLS",
-                                              "pooled": "concatenated"})
-    fig.suptitle(f"{shape} model: sumstats vs federated vs concatenated, two parameters of the causal curve",
+    _family_rows(ax1, y, rows_y, res, n_all, {"sumstats": S.NAME["sumstats"], "federated": S.NAME["2sri"],
+                                              "fed2sls": S.NAME["fed2sls"], "pooled": S.NAME["pooled"]})
+    fig.suptitle(f"{shape} model: estimates by site and by model, two parameters of the causal curve",
                  x=0.01, ha="left", fontsize=11, color=INK)
     handles, labels = ax1.get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, loc="lower center", ncol=3, fontsize=9, bbox_to_anchor=(0.5, -0.01))

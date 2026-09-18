@@ -298,18 +298,18 @@ def headline_metrics(summary: dict, federated: dict, models: list) -> None:
     cards = []
     if "sumstats" in models and "meta_ivw" in summary:
         est, se = summary["meta_ivw"]
-        cards.append(stat_card("Summary statistics: IVW meta", f"{est:.3f}",
+        cards.append(stat_card(runner.MODELS["sumstats"], f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
     if "fed2sls" in models and "fed2sls" in summary:
         est, se = summary["fed2sls"][:2]
-        cards.append(stat_card("Federated Fed-2SLS", f"{est:.3f}",
+        cards.append(stat_card(runner.MODELS["fed2sls"], f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
     if "2sri" in models and "2sri" in federated:
-        cards.append(stat_card("Federated Fed-2SRI", f"{federated['2sri'][0]:.3f}",
-                               "slope from the curve, no CI", "pink"))
+        cards.append(stat_card(runner.MODELS["2sri"], f"{federated['2sri'][0]:.3f}",
+                               "from the curve, no CI", "pink"))
     if "pooled" in models and "pooled" in summary:
         est, se = summary["pooled"]
-        cards.append(stat_card("Concatenated 2SLS", f"{est:.3f}",
+        cards.append(stat_card(runner.MODELS["pooled"], f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "benchmark"))
     if "sumstats" in models and "heterogeneity_q" in summary:
         cards.append(stat_card("Heterogeneity Q", f"{summary['heterogeneity_q'][0]:.1f}",
@@ -357,7 +357,7 @@ def comparison_table(summary: dict, federated: dict, params: dict, federated_se:
     if "pooled" in models:
         if curved and "pooled_quadratic" in summary:
             t1, se1, t2, _ = summary["pooled_quadratic"]
-            rows.append(row("Concatenated quadratic 2SLS (benchmark)", "pooled individual rows", t1, t2, se1))
+            rows.append(row(runner.MODELS["pooled"], "pooled individual rows", t1, t2, se1))
         elif "pooled" in summary:
             est, se = summary["pooled"]
             rows.append(row(runner.MODELS["pooled"], "pooled individual rows", est, None, se))
@@ -445,11 +445,7 @@ with tab_experiments:
         offered = [m for m in runner.MODELS if available or m not in runner.FL_METHODS]
         run_params["models"] = st.multiselect(
             "Model outputs", offered, default=offered, format_func=lambda m: runner.MODELS[m],
-            help="Concatenated 2SLS: one fit on the pooled rows, the benchmark a real federation cannot run. "
-                 "Summary statistics: per-SNP effects from each site, IVW within site, meta-analysed. "
-                 "Fed-2SLS: exact 2SLS from summed sufficient statistics, no training "
-                 "(continuous outcomes; skipped for cox). "
-                 "Fed-2SRI: site-local first stage, then a control-function network trained with FedAvg.",
+            help="  \n".join(f"**{runner.MODELS[m]}**: {runner.MODEL_HELP[m]}" for m in runner.MODELS),
         )
         federated_on = any(m in runner.FL_METHODS for m in run_params["models"])
         c2, c3, c4, c5 = st.columns([2, 1, 1, 1])

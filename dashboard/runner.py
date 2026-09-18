@@ -46,10 +46,17 @@ FL_METHODS = ("2sri", "fed2sls")   # the models that run through federated_learn
 # The four model outputs the experiment tab offers, all on by default. The two
 # federated ones need the job.py step; the other two come from federated_summary_mr.py.
 MODELS = {
-    "pooled": "Concatenated 2SLS (pooled individual rows, benchmark)",
-    "sumstats": "Summary statistics · per-SNP IVW meta-analysis",
-    "fed2sls": "Federated MR · Fed-2SLS (exact 2SLS from summed statistics)",
-    "2sri": "Federated MR · Fed-2SRI (control function, FedAvg-trained)",
+    "pooled": "Concatenated 2SLS",
+    "sumstats": "Sumstats IVW",
+    "fed2sls": "Fed-2SLS",
+    "2sri": "Fed-2SRI",
+}
+# One line each, for help text and captions; the names above stay short.
+MODEL_HELP = {
+    "pooled": "one 2SLS on the pooled individual rows; the benchmark a real federation cannot run",
+    "sumstats": "per-SNP effects from each site, IVW within site, inverse-variance meta-analysis across sites",
+    "fed2sls": "exact 2SLS from summed sufficient statistics, no training; continuous outcomes only",
+    "2sri": "site-local first stage, then a control-function network trained across sites with FedAvg",
 }
 FOREST_ROWS = {"pooled": "pooled", "sumstats": "sumstats", "fed2sls": "fed2sls", "2sri": "federated"}
 
@@ -225,8 +232,8 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
 # One name per federated method, used for the output headings and the estimator table.
 # Each says whether it is MR, which MR design, and how it is federated.
 METHOD_LABELS = {
-    "2sri": "Federated MR · Fed-2SRI (control function, FedAvg-trained)",
-    "fed2sls": "Federated MR · Fed-2SLS (exact 2SLS from summed statistics)",
+    "2sri": "Fed-2SRI · fitted curve",
+    "fed2sls": "Fed-2SLS · fitted curve",
 }
 
 
@@ -248,7 +255,7 @@ def _federated_outputs(p: dict, paths: RunPaths) -> dict:
     out = {}
     for method in p["fl_methods"]:
         out[method_label(method)] = paths.fl / method / p["shape"] / "fitted_curve.png"
-    out["Federated · all methods"] = paths.fl / "fitted_curves_all.png"
+    out["Federated fitted curves"] = paths.fl / "fitted_curves_all.png"
     return out
 
 
@@ -276,7 +283,7 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS)",
+        label="Federated learning (Fed-2SRI, Fed-2SLS)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
@@ -290,7 +297,7 @@ PIPELINE: tuple[Step, ...] = (
     ),
     Step(
         key="summary_mr",
-        label="Conventional MR (per-site sumstats + IVW meta-analysis)",
+        label="Conventional MR (Sumstats IVW, Concatenated 2SLS, forest plot)",
         script=SCRIPTS / "federated_summary_mr.py",
         argv=lambda p, paths: [
             "--shape", p["shape"],
@@ -307,7 +314,7 @@ PIPELINE: tuple[Step, ...] = (
     ),
     Step(
         key="nonlinear_mr",
-        label="Non-linear MR (pooled quadratic 2SLS vs the sumstats line)",
+        label="Non-linear MR (dose-response curve)",
         script=SCRIPTS / "federated_nonlinear_mr.py",
         argv=lambda p, paths: [
             "--shape", p["shape"],
@@ -327,7 +334,7 @@ STEPS = {s.key: s for s in PIPELINE}
 
 # Bump when the look of a figure changes (colours, labels, layout) so that cached
 # runs re-render: every plotting step folds it into its signature.
-FIGURE_VERSION = 3
+FIGURE_VERSION = 4
 for _step in PIPELINE:
     if _step.key != "simulate":
         _sig = _step.signature
