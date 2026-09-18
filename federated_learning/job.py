@@ -77,10 +77,11 @@ def load_secure(args):
     return load_config(args.secure_config, args.secure_set)
 
 
-def results_root(secure):
+def results_root(secure, root=None):
+    root = root or os.path.join(HERE, "results")
     if secure.active:
-        return os.path.join(HERE, "results", "secure", secure.name)
-    return os.path.join(HERE, "results")
+        return os.path.join(root, "secure", secure.name)
+    return root
 
 
 def public_sizes(data_dir, sites, test_size=0.2):
@@ -157,7 +158,7 @@ def summarize_secure(results_dir):
 
 
 def run_dataset(dataset, method, args):
-    data_dir = os.path.join(FED_DIR, dataset)
+    data_dir = os.path.join(args.fed_dir, dataset)
     sites = sorted(os.path.basename(f)[:-4] for f in glob.glob(os.path.join(data_dir, "site*.csv")))
     if not sites:
         raise SystemExit(f"no site*.csv files in {data_dir}")
@@ -201,7 +202,7 @@ def run_dataset(dataset, method, args):
             os.makedirs(os.path.join(metrics_dir, "fedsec"), exist_ok=True)
             write_privacy(os.path.join(metrics_dir, "fedsec", PRIVACY_FILE), report)
 
-    root = results_root(secure)
+    root = results_root(secure, args.results_root)
     results_dir = os.path.join(root, method, dataset)
     os.makedirs(results_dir, exist_ok=True)
     metrics = pd.concat(pd.read_csv(f) for f in sorted(glob.glob(os.path.join(metrics_dir, "*.csv"))))
@@ -242,7 +243,9 @@ def run_parallel(pairs, args):
     os.makedirs(log_dir, exist_ok=True)
     passthrough = [f"--rounds={args.rounds}", f"--epochs={args.epochs}", f"--lr={args.lr}",
                    f"--batch_size={args.batch_size}", f"--workspace={args.workspace}", f"--engine={args.engine}",
-                   f"--task_interval={args.task_interval}"]
+                   f"--task_interval={args.task_interval}", f"--fed_dir={args.fed_dir}"]
+    if args.results_root:
+        passthrough.append(f"--results_root={args.results_root}")
     if args.threads:
         passthrough.append(f"--threads={args.threads}")
     if args.seed:
@@ -292,6 +295,10 @@ def main():
     p.add_argument("--batch_size", type=int, default=0, help="0 = task default (256; 512 for survival)")
     p.add_argument("--threads", type=int, default=None, help="simulator threads (default: one per site)")
     p.add_argument("--workspace", default=os.path.join(HERE, "workspace"))
+    p.add_argument("--fed_dir", default=FED_DIR,
+                   help="directory holding the per-dataset site folders (default data/simulated_data/federated/)")
+    p.add_argument("--results_root", default=None,
+                   help="where to write results/<method>/<dataset>/ (default federated_learning/results/)")
     p.add_argument("--jobs", type=int, default=1, help="run this many (dataset, method) jobs concurrently")
     p.add_argument("--child", action="store_true", help=argparse.SUPPRESS)   # set on --jobs subprocesses
     p.add_argument("--task_interval", type=float, default=0.05,
@@ -308,7 +315,8 @@ def main():
     secure = load_secure(args)                  # fail on a bad config before any job starts
 
     if args.all:
-        datasets = sorted(d for d in os.listdir(FED_DIR) if os.path.isfile(os.path.join(FED_DIR, d, "manifest.json")))
+        datasets = sorted(d for d in os.listdir(args.fed_dir)
+                          if os.path.isfile(os.path.join(args.fed_dir, d, "manifest.json")))
     else:
         datasets = args.dataset or ["quadratic"]
     methods = args.method or ["2sri"]
@@ -320,11 +328,11 @@ def main():
         for d, m in pairs:
             run_dataset(d, m, args)
     if not args.child:
-        root = results_root(secure)
+        root = results_root(secure, args.results_root)
         done = sorted({d for m in plots.METHODS if os.path.isdir(os.path.join(root, m))
                        for d in os.listdir(os.path.join(root, m))
                        if os.path.isfile(os.path.join(root, m, d, "metrics.csv"))})
-        summary = plots.plot_overview(done, root, FED_DIR, os.path.join(root, "fitted_curves_all.png"))
+        summary = plots.plot_overview(done, root, args.fed_dir, os.path.join(root, "fitted_curves_all.png"))
         print(f"\n{os.path.relpath(root, HERE)}/summary.csv (last-round weighted test metrics, all runs so far):")
         print(summary.to_string(index=False))
 

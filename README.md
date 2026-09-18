@@ -44,6 +44,20 @@ uv run python fedmr_job.py --all
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
 FedMR is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
 
+# Interactive dashboard
+
+To explore the whole pipeline without the command line — set the simulation
+parameters, generate a federation, then run the federated learning and MR
+workflows over it and compare every estimator side by side:
+
+```bash
+cd dashboard
+uv sync
+uv run streamlit run app.py
+```
+
+See [dashboard/README.md](dashboard/README.md).
+
 
 # Intro
 

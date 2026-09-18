@@ -2,3 +2,4 @@
 .pixi/
 .venv/
 __pycache__/
+results/dashboard_runs/
