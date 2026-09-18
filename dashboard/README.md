@@ -26,7 +26,7 @@ Fed-2SRI; all four on by default):
 | step | script | runs for |
 |---|---|---|
 | Simulate sites | `simulate_federated_sites.py` | all shapes |
-| Federated learning (Fed-2SRI via FedAvg; Fed-2SLS exact 2SLS) | `federated_learning/job.py` | when either federated model is selected; Fed-2SLS on continuous shapes |
+| Federated learning (Fed-2SRI, Fed-2SLS) | `federated_learning/job.py` | when either federated model is selected; Fed-2SLS on continuous shapes |
 | Conventional MR | `federated_summary_mr.py` | all shapes |
 | Non-linear MR | `federated_nonlinear_mr.py` | `quadratic`, `threshold` |
 

@@ -32,10 +32,10 @@ import mr_style as S  # noqa: E402  one look per estimator across every figure i
 
 BLUE, GRAY, INK, MUTED, SURFACE, GRID = S.BLUE, S.DATA_GREY, S.INK, S.MUTED, S.SURFACE, S.GRID
 METHOD_STYLE = {                     # colour and line style per method, shared with the MR scripts
-    "naive": dict(**S.NAIVE, label="federated naive: f(X)"),
-    "2sri": dict(**S.FED2SRI, label="federated Fed-2SRI: f(X) with control function"),
-    "2sps": dict(**S.FED2SPS, label="federated Fed-2SPS: f(X_hat)"),
-    "fed2sls": dict(**S.FED2SLS, label="federated Fed-2SLS: exact pooled 2SLS, 95% band"),
+    "naive": dict(**S.NAIVE, label=f"{S.NAME['naive']} (federated, no instruments)"),
+    "2sri": dict(**S.FED2SRI, label=S.NAME["2sri"]),
+    "2sps": dict(**S.FED2SPS, label=S.NAME["2sps"]),
+    "fed2sls": dict(**S.FED2SLS, label=f"{S.NAME['fed2sls']} (95% band)"),
 }
 METHODS = list(METHOD_STYLE)
 
@@ -134,7 +134,7 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
         ylab = "mean Y" if task.name == "continuous" else "logit of P(Y = 1)"
         y0 = np.interp(0.0, emp.x, y)
         ax.scatter(emp.x, y - y0, s=18, color=GRAY, zorder=2,
-                   label=f"pooled data: binned {ylab}, relative to X = 0")
+                   label=f"pooled data: binned {ylab}")
     x_ref = None
     for method in METHODS:
         if method not in method_runs:
@@ -164,7 +164,7 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
                 label=f'{st["label"]}, round {last}' + (", bootstrap band" if band is not None else ""))
     tc = true_curve(manifest, x_ref)
     if tc is not None:
-        ax.plot(x_ref, tc - np.interp(0.0, x_ref, tc), **S.line(S.TRUTH), zorder=3, label="true causal curve f(X)")
+        ax.plot(x_ref, tc - np.interp(0.0, x_ref, tc), **S.line(S.TRUTH), zorder=3, label=S.NAME["truth"])
     ax.set_title(title, loc="left", fontsize=10, color=INK)
     ax.set_xlabel("X (exposure)", fontsize=9, color=MUTED)
     ax.set_ylabel(task.curve_label + ", relative to X = 0", fontsize=9, color=MUTED)

@@ -30,6 +30,18 @@ DATA = dict(color=DATA_GREY, marker="o")
 # keyed by the federated_learning/job.py method names
 BY_METHOD = {"naive": NAIVE, "2sri": FED2SRI, "2sps": FED2SPS, "fed2sls": FED2SLS}
 
+# The short name of each estimator, used verbatim in legends, row labels, cards and tables.
+# Explanations belong in help text and captions, not in the name.
+NAME = {
+    "truth": "Truth",
+    "pooled": "Concatenated 2SLS",
+    "sumstats": "Sumstats IVW",
+    "fed2sls": "Fed-2SLS",
+    "2sri": "Fed-2SRI",
+    "2sps": "Fed-2SPS",
+    "naive": "Naive",
+}
+
 
 def line(style: dict) -> dict:
     """The matplotlib kwargs for drawing a line in this style."""
