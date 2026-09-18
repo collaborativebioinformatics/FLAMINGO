@@ -282,14 +282,10 @@ def headline_metrics(summary: dict) -> None:
                                "across sites", "neutral"))
     stat_row(cards)
 
-    if {"model_sumstats", "pooled_quadratic"} & summary.keys():
-        rows = []
-        for key, name in (("model_sumstats", "Summary statistics (meta of site quadratic fits)"),
-                          ("pooled_quadratic", "Concatenated quadratic 2SLS")):
-            if key in summary:
-                t1, t1se, t2, t2se = summary[key]
-                rows.append({"estimator": name, "θ1": t1, "θ1 se": t1se, "θ2": t2, "θ2 se": t2se})
-        st.dataframe(pl.DataFrame(rows), width="stretch", hide_index=True)
+    if "pooled_quadratic" in summary:
+        t1, t1se, t2, t2se = summary["pooled_quadratic"]
+        st.dataframe(pl.DataFrame([{"estimator": "Concatenated quadratic 2SLS", "θ1": t1, "θ1 se": t1se,
+                                    "θ2": t2, "θ2 se": t2se}]), width="stretch", hide_index=True)
 
     if "target_label" in summary:
         st.caption(f"Target: {summary['target_label']}")
@@ -315,9 +311,6 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
         est, se = summary["meta_ivw"]
         rows.append(row("Summary-stat IVW meta", "per-SNP summary statistics", est,
                         None, se))
-    if curved and "model_sumstats" in summary:
-        t1, se1, t2, _ = summary["model_sumstats"]
-        rows.append(row("Summary-stat model meta", "per-site quadratic fits", t1, t2, se1))
     if curved and "pooled_quadratic" in summary:
         t1, se1, t2, _ = summary["pooled_quadratic"]
         rows.append(row("Concatenated quadratic 2SLS", "pooled individual rows", t1, t2, se1))

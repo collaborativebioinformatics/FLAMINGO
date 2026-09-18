@@ -24,7 +24,7 @@ the parameter files used to generate benchmark datasets.
 | `scripts/simulate_binary.py` | Same exposure model with a 0/1 outcome from a liability or logistic link at a target prevalence |
 | `scripts/simulators.py`, `scripts/simulate_federated.py` | Registry of outcome simulators and the generic ten-site orchestrator (`--outcome continuous|binary|survival`) |
 | `scripts/check_survival.py` | Naive, 2SPS, 2SRI and oracle Cox fits against the true log hazard ratio |
-| `scripts/federated_summary_mr.py` | Per model: GWAS summary stats per site, IVW MR per site, meta-analysis vs the NVFlare federated model vs one pooled fit on concatenated data, forest plot; for curved models a two-column plot adding site-level model summaries |
+| `scripts/federated_summary_mr.py` | Per model: GWAS summary stats per site, IVW MR per site, meta-analysis vs the NVFlare federated model vs one pooled fit on concatenated data, forest plot; for curved models a two-column plot with each site's own quadratic fit |
 | `scripts/federated_nonlinear_mr.py` | Quadratic 2SLS on concatenated sites vs the sumstats line; dose-response plot |
 | `scripts/rare_events_sweep.py` | Seed sweep of the rare-event Cox setting: bias, RMSE and coverage for both routes |
 | `scripts/simulate_federated_sites.py` | Ten sites sharing one causal curve (`--shape`), per-site heritability/confounding sampled from a distribution; `--shared-snps`, `--maf-shift`, `--theta-sd`, `--pleiotropy-*` for heterogeneity scenarios |

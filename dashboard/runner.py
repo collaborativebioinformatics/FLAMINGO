@@ -435,7 +435,6 @@ _PATTERNS = {
     # `federated Fed-2SLS: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
     "fed2sls": rf"federated Fed-2SLS:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
     "heterogeneity_q": rf"heterogeneity Q\s+{_NUM}",
-    "model_sumstats": rf"model sumstats[^:]*:\s*theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
     "pooled_quadratic": rf"concatenated quadratic 2SLS:\s+theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
 }
 

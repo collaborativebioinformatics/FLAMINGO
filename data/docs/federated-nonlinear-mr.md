@@ -30,12 +30,9 @@ through the origin. `theta2` is not identifiable from these summaries.
 | quadratic | θ1 = 0.30, θ2 = 0.15 | θ1 0.317 (0.014), θ2 0.149 (0.031) | slope 0.318 (0.016) |
 | threshold | slope 0.30 below 0.5, flat above | θ1 0.225 (0.014), θ2 -0.053 (0.031) | slope 0.224 (0.015) |
 
-A middle route, each site fitting the quadratic 2SLS locally and sharing its
-two coefficients with their covariance, matches the concatenated fit: see the
-"model sumstats" row of `results/sumstats.quadratic.png` and the curved-model
-section of `federated-summary-mr.md`. Fed-2SLS (`federated-exact-mr.md`) goes
-one step further and reproduces the concatenated fit exactly from per-site
-cross-product matrices.
+Fed-2SLS (`federated-exact-mr.md`) reproduces the concatenated fit exactly
+from per-site cross-product matrices, so the curve is recoverable without
+pooling rows; see the curved-model section of `federated-summary-mr.md`.
 
 Standard errors in parentheses. Plots: `results/nonlinear.quadratic.png`,
 `results/nonlinear.threshold.png`. Each shows the true curve, the pooled fit
