@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="FLAMINGO pipeline">
+<title>FLAMINGO pipeline</title>
+<desc>Ten simulated biobank sites feed three estimator families — summary statistics, a pooled benchmark, and federated estimators — compared on a forest plot for the linear model and a dose-response curve for the non-linear model.</desc>
+<defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#D4537E" stroke-width="2"/></marker></defs>
+<rect width="1600" height="900" fill="#FDF6F8"/>
+<text x="40" y="50" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="34" fill="#72243E" font-weight="800" text-anchor="start">FLAMINGO</text>
+<text x="232" y="50" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#6B6A65" font-weight="400" text-anchor="start">Federated Non-Linear Mendelian Randomization</text>
+<rect x="40" y="80" width="372" height="700" rx="12" fill="#FFFFFF" stroke="#F4C0D1" stroke-width="1.5"/>
+<text x="60" y="112" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#72243E" font-weight="700" text-anchor="start">1 · Shared causal model</text>
+<text x="60" y="132" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">identical structure at every site</text>
+<rect x="62" y="230" width="88" height="32" rx="6" fill="#FBEAF0" stroke="#D4537E" stroke-width="1"/>
+<text x="106" y="251" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#72243E" font-weight="400" text-anchor="middle">SNPs G</text>
+<rect x="182" y="230" width="88" height="32" rx="6" fill="#FBEAF0" stroke="#D4537E" stroke-width="1"/>
+<text x="226" y="251" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#72243E" font-weight="400" text-anchor="middle">exposure X</text>
+<rect x="302" y="230" width="88" height="32" rx="6" fill="#FBEAF0" stroke="#D4537E" stroke-width="1"/>
+<text x="346" y="251" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#72243E" font-weight="400" text-anchor="middle">outcome Y</text>
+<rect x="190" y="158" width="112" height="30" rx="6" fill="#FAECE7" stroke="#D85A30" stroke-width="1"/>
+<text x="246" y="179" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#712B13" font-weight="400" text-anchor="middle">confounder U</text>
+<line x1="152" y1="246" x2="178" y2="246" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="272" y1="246" x2="298" y2="246" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="218" y1="190" x2="230" y2="224" stroke="#D85A30" stroke-width="1.6" marker-end="url(#arw)"/>
+<line x1="276" y1="190" x2="340" y2="224" stroke="#D85A30" stroke-width="1.6" marker-end="url(#arw)"/>
+<text x="165" y="224" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="middle">h²ₓ</text>
+<text x="190" y="208" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#712B13" font-weight="400" text-anchor="middle">γₓ</text>
+<text x="360" y="208" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#712B13" font-weight="400" text-anchor="middle">γᵧ</text>
+<text x="226" y="292" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="14" fill="#2C2C2A" font-weight="400" text-anchor="middle">f(X) = θ₁X + θ₂X²</text>
+<text x="60" y="330" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="start">Outcome families</text>
+<rect x="60" y="340" width="61" height="21" rx="6" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="68" y="353.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#72243E" font-weight="400" text-anchor="start">linear</text>
+<rect x="127.64" y="340" width="83" height="21" rx="6" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="135.64" y="353.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#72243E" font-weight="400" text-anchor="start">quadratic</text>
+<rect x="60" y="368" width="83" height="21" rx="6" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="68" y="381.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#72243E" font-weight="400" text-anchor="start">threshold</text>
+<rect x="149.95999999999998" y="368" width="68" height="21" rx="6" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="157.95999999999998" y="381.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#72243E" font-weight="400" text-anchor="start">u-shape</text>
+<text x="60" y="430" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" fill="#712B13" font-weight="600" text-anchor="start">In development</text>
+<text x="173" y="430" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="start">— no end-to-end results yet</text>
+<rect x="60" y="440" width="120" height="21" rx="6" fill="#FAECE7" stroke="#F5C4B3" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="68" y="453.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#712B13" font-weight="400" text-anchor="start">cox (survival)</text>
+<rect x="187.16" y="440" width="128" height="21" rx="6" fill="#FAECE7" stroke="#F5C4B3" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="195.16" y="453.5" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#712B13" font-weight="400" text-anchor="start">binary logistic</text>
+<text x="60" y="510" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13" fill="#2C2C2A" font-weight="600" text-anchor="start">Ten biobank sites</text>
+<rect x="60" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="74.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">01</text>
+<rect x="63" y="543" width="9" height="4" rx="2" fill="#D85A30"/>
+<rect x="93" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="107.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">02</text>
+<rect x="96" y="543" width="12" height="4" rx="2" fill="#D85A30"/>
+<rect x="126" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="140.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">03</text>
+<rect x="129" y="543" width="14" height="4" rx="2" fill="#D85A30"/>
+<rect x="159" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="173.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">04</text>
+<rect x="162" y="543" width="17" height="4" rx="2" fill="#D85A30"/>
+<rect x="192" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="206.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">05</text>
+<rect x="195" y="543" width="19" height="4" rx="2" fill="#D85A30"/>
+<rect x="225" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="239.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">06</text>
+<rect x="228" y="543" width="15" height="4" rx="2" fill="#D85A30"/>
+<rect x="258" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="272.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">07</text>
+<rect x="261" y="543" width="21" height="4" rx="2" fill="#D85A30"/>
+<rect x="291" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="305.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">08</text>
+<rect x="294" y="543" width="23" height="4" rx="2" fill="#D85A30"/>
+<rect x="324" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="338.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">09</text>
+<rect x="327" y="543" width="20" height="4" rx="2" fill="#D85A30"/>
+<rect x="357" y="524" width="29" height="30" rx="5" fill="#FBEAF0" stroke="#F4C0D1" stroke-width="1"/>
+<text x="371.5" y="537" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="10" fill="#72243E" font-weight="400" text-anchor="middle">10</text>
+<rect x="360" y="543" width="22" height="4" rx="2" fill="#D85A30"/>
+<text x="60" y="578" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">shared by every site:  θ₁, θ₂</text>
+<text x="60" y="598" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#712B13" font-weight="400" text-anchor="start">varies by site:  n 1k–10k,</text>
+<text x="60" y="616" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#712B13" font-weight="400" text-anchor="start">h²ₓ, γₓ, γᵧ ~ Beta</text>
+<text x="60" y="644" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="start">writes  &lt;shape&gt;/siteNN.csv + manifest</text>
+<rect x="60" y="658" width="209" height="20.5" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="68" y="671.0" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">simulate_federated_sites.py</text>
+<rect x="452" y="80" width="572" height="218" rx="12" fill="#FFFFFF" stroke="#F4C0D1" stroke-width="1.5"/>
+<text x="472" y="111" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#72243E" font-weight="700" text-anchor="start">2 · Summary statistics</text>
+<text x="472" y="131" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">per-SNP GWAS at each site — the conventional route</text>
+<text x="472" y="167" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">travels</text>
+<text x="584" y="167" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">β, SE per SNP</text>
+<text x="472" y="191" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">per site</text>
+<text x="584" y="191" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">IVW over SNPs</text>
+<text x="472" y="215" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">combined</text>
+<text x="584" y="215" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">inverse-variance meta-analysis</text>
+<text x="472" y="239" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">recovers</text>
+<text x="584" y="239" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">one average slope</text>
+<rect x="824.01" y="270" width="180" height="20.5" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="832.01" y="283.0" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">federated_summary_mr.py</text>
+<text x="472" y="275" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#712B13" font-weight="400" text-anchor="start" font-style="italic">θ₂ is not identifiable from summary statistics alone</text>
+<rect x="452" y="321" width="572" height="218" rx="12" fill="#FFFFFF" stroke="#F4C0D1" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="472" y="352" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#72243E" font-weight="700" text-anchor="start">3 · Pooled — all sites, one model</text>
+<text x="472" y="372" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">benchmark: needs every individual row in one place</text>
+<text x="472" y="408" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">linear</text>
+<text x="584" y="408" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">concatenated 2SLS</text>
+<text x="472" y="432" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">non-linear</text>
+<text x="584" y="432" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">quadratic 2SLS on (X̂, X̂²)</text>
+<text x="472" y="456" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">stage 1</text>
+<text x="584" y="456" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">X̂ = SNP-predicted X, per site</text>
+<rect x="809.75" y="511" width="194" height="20.5" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="817.75" y="524.0" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">federated_nonlinear_mr.py</text>
+<text x="472" y="492" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="start" font-style="italic">what a federation could not run — the yardstick, not a result</text>
+<rect x="452" y="562" width="572" height="218" rx="12" fill="#FFFFFF" stroke="#F4C0D1" stroke-width="1.5"/>
+<text x="472" y="593" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#72243E" font-weight="700" text-anchor="start">4 · Federated — rows never move</text>
+<text x="472" y="613" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">each site releases summed statistics or model updates</text>
+<text x="472" y="649" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">linear</text>
+<text x="584" y="649" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">Fed-2SLS: exact 2SLS from sums</text>
+<text x="472" y="673" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="600" text-anchor="start">non-linear</text>
+<text x="584" y="673" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#2C2C2A" font-weight="400" text-anchor="start">Fed-2SRI: non-linear two-stage residual instruments</text>
+<rect x="774.1" y="752" width="230" height="20.5" rx="6" fill="#FFFFFF" stroke="#D3D1C7" stroke-width="1"/>
+<text x="782.1" y="765.0" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">federated_exact_mr.py · job.py</text>
+<text x="472" y="733" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#72243E" font-weight="400" text-anchor="start" font-style="italic">|FedMR − pooled| &lt; 1e-10 — the same estimator, not an approximation</text>
+<rect x="1064" y="80" width="496" height="700" rx="12" fill="#FFFFFF" stroke="#F4C0D1" stroke-width="1.5"/>
+<text x="1084" y="112" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="17" fill="#72243E" font-weight="700" text-anchor="start">5 · Results</text>
+<text x="1084" y="132" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">every estimator against the truth</text>
+<text x="1084" y="160" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">linear model — forest plot</text>
+<text x="1084" y="179" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="start">sites and estimators on one axis</text>
+<line x1="1385.3600000000001" y1="194" x2="1385.3600000000001" y2="406" stroke="#2C2C2A" stroke-width="1.2" stroke-dasharray="5 4"/>
+<text x="1385.3600000000001" y="188" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="middle">true θ</text>
+<line x1="1322.4" y1="210" x2="1406.4" y2="210" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1364.4" cy="210" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="214" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site01</text>
+<line x1="1365.1" y1="230" x2="1428.1" y2="230" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1396.6" cy="230" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="234" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site02</text>
+<line x1="1349.7" y1="250" x2="1404.3" y2="250" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1377.0" cy="250" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="254" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site03</text>
+<line x1="1366.5" y1="270" x2="1437.9" y2="270" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1402.2" cy="270" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="274" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site04</text>
+<line x1="1358.1" y1="290" x2="1404.3" y2="290" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1381.2" cy="290" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="294" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site05</text>
+<line x1="1363.0" y1="310" x2="1421.8" y2="310" stroke="#D4537E" stroke-width="1.6"/>
+<circle cx="1392.4" cy="310" r="3.4" fill="#FFFFFF" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="314" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="start">site06</text>
+<line x1="1366.3600000000001" y1="338" x2="1418.3600000000001" y2="338" stroke="#D4537E" stroke-width="1.4"/>
+<path d="M1381.3600000000001 338L1392.3600000000001 332L1403.3600000000001 338L1392.3600000000001 344Z" fill="#FBEAF0" stroke="#D4537E" stroke-width="1.6"/>
+<text x="1084" y="342" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">sumstats IVW</text>
+<line x1="1356.5600000000002" y1="362" x2="1408.5600000000002" y2="362" stroke="#2C2C2A" stroke-width="1.4"/>
+<path d="M1371.5600000000002 362L1382.5600000000002 356L1393.5600000000002 362L1382.5600000000002 368Z" fill="#FFFFFF" stroke="#2C2C2A" stroke-width="1.6" stroke-dasharray="4 3"/>
+<text x="1084" y="366" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">pooled 2SLS</text>
+<line x1="1356.5600000000002" y1="386" x2="1408.5600000000002" y2="386" stroke="#72243E" stroke-width="1.4"/>
+<path d="M1371.5600000000002 386L1382.5600000000002 380L1393.5600000000002 386L1382.5600000000002 392Z" fill="#D4537E" stroke="#72243E" stroke-width="1.6"/>
+<text x="1084" y="390" font-family="'SF Mono', 'DejaVu Sans Mono', Menlo, Consolas, monospace" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">FedMR</text>
+<text x="1214" y="416" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#72243E" font-weight="400" text-anchor="start" font-style="italic">FedMR sits exactly on the pooled diamond</text>
+<line x1="1084" y1="446" x2="1540" y2="446" stroke="#F4C0D1" stroke-width="1"/>
+<text x="1084" y="472" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="13.5" fill="#2C2C2A" font-weight="600" text-anchor="start">non-linear model — dose-response curve</text>
+<text x="1084" y="491" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12" fill="#6B6A65" font-weight="400" text-anchor="start">the whole curve, not one average slope</text>
+<line x1="1124" y1="510" x2="1124" y2="700" stroke="#D3D1C7" stroke-width="1.2"/>
+<line x1="1124" y1="700" x2="1510" y2="700" stroke="#D3D1C7" stroke-width="1.2"/>
+<text x="1317.0" y="730" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B6A65" font-weight="400" text-anchor="middle">exposure X</text>
+<text x="1108" y="605.0" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#6B6A65" text-anchor="middle" transform="rotate(-90 1108 605.0)">effect on Y</text>
+<polyline points="1124.0,684.8 1132.8,684.7 1141.5,684.5 1150.3,684.1 1159.1,683.5 1167.9,682.8 1176.6,682.0 1185.4,681.0 1194.2,679.8 1203.0,678.4 1211.7,676.9 1220.5,675.3 1229.3,673.5 1238.0,671.5 1246.8,669.4 1255.6,667.1 1264.4,664.7 1273.1,662.1 1281.9,659.4 1290.7,656.5 1299.5,653.4 1308.2,650.2 1317.0,646.8 1325.8,643.3 1334.5,639.6 1343.3,635.7 1352.1,631.7 1360.9,627.6 1369.6,623.2 1378.4,618.8 1387.2,614.1 1396.0,609.3 1404.7,604.4 1413.5,599.3 1422.3,594.0 1431.0,588.6 1439.8,583.0 1448.6,577.3 1457.4,571.4 1466.1,565.4 1474.9,559.2 1483.7,552.8 1492.5,546.3 1501.2,539.6 1510.0,532.8" fill="none" stroke="#2C2C2A" stroke-width="2.2" stroke-dasharray="6 4"/>
+<polyline points="1124.0,681.0 1132.8,680.9 1141.5,680.7 1150.3,680.3 1159.1,679.8 1167.9,679.2 1176.6,678.4 1185.4,677.4 1194.2,676.4 1203.0,675.1 1211.7,673.7 1220.5,672.2 1229.3,670.5 1238.0,668.7 1246.8,666.8 1255.6,664.7 1264.4,662.4 1273.1,660.0 1281.9,657.5 1290.7,654.8 1299.5,652.0 1308.2,649.0 1317.0,645.9 1325.8,642.6 1334.5,639.2 1343.3,635.6 1352.1,631.9 1360.9,628.1 1369.6,624.1 1378.4,619.9 1387.2,615.6 1396.0,611.2 1404.7,606.6 1413.5,601.9 1422.3,597.0 1431.0,592.0 1439.8,586.9 1448.6,581.6 1457.4,576.1 1466.1,570.5 1474.9,564.8 1483.7,558.9 1492.5,552.9 1501.2,546.7 1510.0,540.4" fill="none" stroke="#D4537E" stroke-width="2.6"/>
+<polyline points="1124.0,669.6 1132.8,667.4 1141.5,665.1 1150.3,662.9 1159.1,660.6 1167.9,658.4 1176.6,656.1 1185.4,653.9 1194.2,651.6 1203.0,649.4 1211.7,647.1 1220.5,644.9 1229.3,642.7 1238.0,640.4 1246.8,638.2 1255.6,635.9 1264.4,633.7 1273.1,631.4 1281.9,629.2 1290.7,626.9 1299.5,624.7 1308.2,622.4 1317.0,620.2 1325.8,618.0 1334.5,615.7 1343.3,613.5 1352.1,611.2 1360.9,609.0 1369.6,606.7 1378.4,604.5 1387.2,602.2 1396.0,600.0 1404.7,597.7 1413.5,595.5 1422.3,593.3 1431.0,591.0 1439.8,588.8 1448.6,586.5 1457.4,584.3 1466.1,582.0 1474.9,579.8 1483.7,577.5 1492.5,575.3 1501.2,573.0 1510.0,570.8" fill="none" stroke="#D3D1C7" stroke-width="2.2"/>
+<line x1="1140" y1="524" x2="1168" y2="524" stroke="#2C2C2A" stroke-width="2.4" stroke-dasharray="6 4"/>
+<text x="1176" y="528" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">true curve</text>
+<line x1="1140" y1="542" x2="1168" y2="542" stroke="#D4537E" stroke-width="2.4"/>
+<text x="1176" y="546" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">federated / pooled</text>
+<line x1="1140" y1="560" x2="1168" y2="560" stroke="#D3D1C7" stroke-width="2.4"/>
+<text x="1176" y="564" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="11.5" fill="#2C2C2A" font-weight="400" text-anchor="start">sumstats: average slope</text>
+<line x1="418" y1="430" x2="446" y2="189.0" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="1030" y1="189.0" x2="1058" y2="430" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="418" y1="430" x2="446" y2="430.0" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="1030" y1="430.0" x2="1058" y2="430" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="418" y1="430" x2="446" y2="671.0" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="1030" y1="671.0" x2="1058" y2="430" stroke="#D4537E" stroke-width="2" marker-end="url(#arw)"/>
+<line x1="44" y1="810" x2="70" y2="810" stroke="#D4537E" stroke-width="2.6"/>
+<text x="78" y="814" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">pink — travels between sites</text>
+<line x1="306.79999999999995" y1="810" x2="332.79999999999995" y2="810" stroke="#D85A30" stroke-width="2.6"/>
+<text x="340.79999999999995" y="814" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">coral — varies per site, and the confounding</text>
+<line x1="675.1999999999999" y1="810" x2="701.1999999999999" y2="810" stroke="#2C2C2A" stroke-width="2.6" stroke-dasharray="5 4"/>
+<text x="709.1999999999999" y="814" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" fill="#6B6A65" font-weight="400" text-anchor="start">dashed — needs pooled individual rows (benchmark only)</text>
+</svg>
