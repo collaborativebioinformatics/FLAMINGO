@@ -64,7 +64,13 @@ Mendelian randomization (MR) uses genetic variants as natural experiments to est
 
 # Pipeline
 
-![FLAMINGO pipeline: shared causal model, simulation across 10 biobank sites, summary-statistics MR, non-linear MR and NVFlare FedAvg, overlaid on one dose-response plot](flamingo_pipeline.png)
+![FLAMINGO pipeline: a shared causal model simulated across ten biobank sites, then three estimator families — per-SNP summary statistics, a pooled all-rows benchmark, and federated estimators (FedMR and NVFlare FedAvg) — compared on a forest plot for the linear model and a dose-response curve for the non-linear model](images/flamingo_pipeline.png)
+
+The diagram is generated: edit [images/make_pipeline_diagram.py](images/make_pipeline_diagram.py) and re-run it to rebuild the SVG and PNG.
+
+```bash
+uv run python images/make_pipeline_diagram.py
+```
 
 # Further Reading
 
