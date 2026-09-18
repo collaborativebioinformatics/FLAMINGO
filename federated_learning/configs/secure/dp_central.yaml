@@ -1,0 +1,8 @@
+name: dp_central
+description: >
+  Central site-level DP. A trusted server clips each update to 0.5 and adds Gaussian noise
+  with multiplier 1 to the weighted sum. Protects the released models, not the updates
+  against the server itself. Weights are the registered sizes (fixed in advance).
+weights: registered
+dp: {enabled: true, mode: central, clip_norm: 0.5, noise_multiplier: 1.0, delta: 1.0e-5}
+leakage: {enabled: true}

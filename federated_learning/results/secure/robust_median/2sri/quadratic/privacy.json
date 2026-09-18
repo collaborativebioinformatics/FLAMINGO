@@ -1,0 +1,54 @@
+{
+ "dp": false,
+ "epsilon_aggregate": "inf",
+ "epsilon_server": "inf",
+ "config": {
+  "name": "robust_median",
+  "description": "Sign-flip attack as in attack_signflip.yaml, aggregated by the sample-size-weighted coordinate-wise median. Assumes honest sites hold more than half the weight.\n",
+  "weights": "reported",
+  "attack": {
+   "enabled": true,
+   "kind": "sign_flip",
+   "sites": [],
+   "n_malicious": 1,
+   "select": "largest",
+   "scale": 10.0,
+   "noise_std": 1.0,
+   "weight_multiplier": 1.0,
+   "start_round": 0,
+   "follows_protocol": false
+  },
+  "defense": {
+   "enabled": true,
+   "rule": "median",
+   "trim_fraction": 0.1,
+   "krum_f": 1,
+   "multi_krum_m": null,
+   "gm_max_iter": 100,
+   "gm_tol": 1e-07,
+   "gm_nu": 1e-06,
+   "norm_bound": null,
+   "norm_bound_multiplier": 1.0
+  },
+  "dp": {
+   "enabled": false,
+   "mode": "central",
+   "clip_norm": 0.5,
+   "noise_multiplier": 1.0,
+   "delta": 1e-05,
+   "min_honest": null
+  },
+  "secagg": {
+   "enabled": false,
+   "frac_bits": 24
+  },
+  "leakage": {
+   "enabled": false,
+   "mia_max_members": 2000
+  }
+ },
+ "malicious_sites": [
+  "site10"
+ ],
+ "seed": 0
+}

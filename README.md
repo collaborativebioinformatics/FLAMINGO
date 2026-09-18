@@ -48,3 +48,4 @@ Mendelian randomization (MR) uses genetic variants as natural experiments to est
 # Further Reading
 
 - [In-depth reasoning](indepth_reasoning.md): more detail on the methods and the reasoning behind them.
+- [Robust and privacy-preserving federation](federated_learning/ROBUST_PRIVATE.md): malicious sites, what the server learns from the updates, differential privacy and secure aggregation for the federated MR second stage.

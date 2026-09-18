@@ -122,6 +122,31 @@ outcomes are drawn on the logit scale, which is where the model's `f` lives;
 the binned data points are converted to logits to match. `../data/scripts/federated_nonlinear_mr.py` draws the naive and 2SRI
 curves next to the concatenated 2SLS fit and the summary-statistics IVW line.
 
+## Robust and privacy-preserving federation (optional)
+
+`src/fedsec/` adds defenses against malicious sites and against anyone who
+watches the updates: robust aggregation rules, simulated attacks, site-level
+differential privacy with exact accounting, secure aggregation, and leakage
+probes. Every component is off unless a YAML config turns it on, and with
+everything off the runs above are byte-identical to before. Threat model,
+every assumption, and results: [ROBUST_PRIVATE.md](ROBUST_PRIVATE.md).
+
+```bash
+uv run python job.py --dataset quadratic --secure_config configs/secure/robust_median.yaml
+uv run python job.py --dataset cox --engine local --secure_config configs/secure/dp_distributed_secagg.yaml
+uv run python secure_experiments.py --suite all --jobs 12     # robustness, privacy, combined sweeps
+uv run python tests/test_fedsec.py
+```
+
+Secure runs write to `results/secure/`; `results/<method>/` is never touched by them.
+
+| File | What |
+|---|---|
+| `src/fedsec/` | config, attacks, aggregators, dp, secagg, leakage, protocol (shared by both engines), NVFlare aggregator, report figures |
+| `configs/secure/*.yaml` | one scenario per file; `experiments.yaml` defines the sweeps |
+| `secure_experiments.py` | runs the sweeps with the local engine, writes `results/secure/experiments/<suite>/` |
+| `tests/test_fedsec.py` | unit checks of the building blocks |
+
 ## Notes
 
 - Last-round weighted test metrics for every run are in `results/summary.csv`, written by `job.py` and by `src/plots.py`.

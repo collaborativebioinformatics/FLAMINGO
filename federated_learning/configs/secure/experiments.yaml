@@ -1,0 +1,80 @@
+# Experiment suites for secure_experiments.py. Each scenario is a fedsec config (the same keys as
+# the single-scenario YAMLs next to this file). Every suite also runs "clean": the original FedAvg
+# code path with fedsec off, per dataset and seed, which is the reference for rmse_vs_clean.
+#
+#   uv run python secure_experiments.py --suite robustness --jobs 12
+#   uv run python secure_experiments.py --suite all --jobs 12
+#
+# Only the local engine is used (same arithmetic as NVFlare, seconds per run).
+
+defaults:
+  method: 2sri
+  datasets: [quadratic, cox]
+  seeds: [0, 1, 2, 3, 4]
+  rounds: 5
+  epochs: 2
+  lr: 0.01
+
+suites:
+  robustness:
+    description: Malicious sites against aggregation rules (no dp, no secagg).
+    # scenarios = every attack x every defense
+    attacks:
+      no_attack: {}
+      sign_flip: {attack: {enabled: true, kind: sign_flip, scale: 10.0, n_malicious: 1, select: largest}}
+      scale: {attack: {enabled: true, kind: scale, scale: 10.0, n_malicious: 1, select: largest}}
+      gaussian: {attack: {enabled: true, kind: gaussian, noise_std: 0.1, n_malicious: 1, select: largest}}
+      outcome_flip: {attack: {enabled: true, kind: outcome_flip, n_malicious: 2, select: largest}}
+      outcome_shuffle: {attack: {enabled: true, kind: outcome_shuffle, n_malicious: 2, select: largest}}
+      flip_inflate: {attack: {enabled: true, kind: outcome_flip, n_malicious: 1, select: smallest,
+                              weight_multiplier: 20.0}}
+    defenses:
+      fedavg: {}
+      fedavg_registered: {weights: registered}
+      norm_bound: {defense: {enabled: true, rule: fedavg, norm_bound: adaptive, norm_bound_multiplier: 1.0}}
+      median: {defense: {enabled: true, rule: median}}
+      trimmed_mean: {defense: {enabled: true, rule: trimmed_mean, trim_fraction: 0.2}}
+      krum: {defense: {enabled: true, rule: krum, krum_f: 2}}
+      multi_krum: {defense: {enabled: true, rule: multi_krum, krum_f: 2}}
+      geometric_median: {defense: {enabled: true, rule: geometric_median}}
+
+  privacy:
+    description: What the server sees and what dp noise costs (no attack).
+    seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # dp noise dominates the run-to-run variance
+    scenarios:
+      plain_fedavg: {leakage: {enabled: true}}
+      secagg: {secagg: {enabled: true}, leakage: {enabled: true}}
+      central_z0.5: {weights: registered, dp: {enabled: true, mode: central, noise_multiplier: 0.5}, leakage: {enabled: true}}
+      central_z1: {weights: registered, dp: {enabled: true, mode: central, noise_multiplier: 1.0}, leakage: {enabled: true}}
+      central_z2: {weights: registered, dp: {enabled: true, mode: central, noise_multiplier: 2.0}, leakage: {enabled: true}}
+      central_z4: {weights: registered, dp: {enabled: true, mode: central, noise_multiplier: 4.0}, leakage: {enabled: true}}
+      distributed_secagg_z0.5: {weights: registered, dp: {enabled: true, mode: distributed, noise_multiplier: 0.5}, secagg: {enabled: true}, leakage: {enabled: true}}
+      distributed_secagg_z1: {weights: registered, dp: {enabled: true, mode: distributed, noise_multiplier: 1.0}, secagg: {enabled: true}, leakage: {enabled: true}}
+      distributed_secagg_z2: {weights: registered, dp: {enabled: true, mode: distributed, noise_multiplier: 2.0}, secagg: {enabled: true}, leakage: {enabled: true}}
+      distributed_secagg_z4: {weights: registered, dp: {enabled: true, mode: distributed, noise_multiplier: 4.0}, secagg: {enabled: true}, leakage: {enabled: true}}
+      distributed_nosecagg_z1: {weights: registered, dp: {enabled: true, mode: distributed, noise_multiplier: 1.0}, leakage: {enabled: true}}
+      local_z0.5: {weights: registered, dp: {enabled: true, mode: local, noise_multiplier: 0.5}, leakage: {enabled: true}}
+      local_z1: {weights: registered, dp: {enabled: true, mode: local, noise_multiplier: 1.0}, leakage: {enabled: true}}
+      local_z2: {weights: registered, dp: {enabled: true, mode: local, noise_multiplier: 2.0}, leakage: {enabled: true}}
+      local_z4: {weights: registered, dp: {enabled: true, mode: local, noise_multiplier: 4.0}, leakage: {enabled: true}}
+
+  combined:
+    description: >
+      A sign-flip x10 attacker at the largest site, under privacy protection. Shows which privacy
+      designs also bound a malicious site and which hand it a blind spot.
+    seeds: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    scenarios:
+      attack_only: {attack: {enabled: true, kind: sign_flip, scale: 10.0}}
+      central_dp: {weights: registered, attack: {enabled: true, kind: sign_flip, scale: 10.0},
+                   dp: {enabled: true, mode: central, noise_multiplier: 1.0}}
+      secagg_only: {attack: {enabled: true, kind: sign_flip, scale: 10.0}, secagg: {enabled: true}}
+      distributed_secagg: {weights: registered, attack: {enabled: true, kind: sign_flip, scale: 10.0},
+                           dp: {enabled: true, mode: distributed, noise_multiplier: 1.0}, secagg: {enabled: true}}
+      distributed_secagg_attacker_clips: {weights: registered,
+                           attack: {enabled: true, kind: sign_flip, scale: 10.0, follows_protocol: true},
+                           dp: {enabled: true, mode: distributed, noise_multiplier: 1.0}, secagg: {enabled: true}}
+      local_dp_median: {weights: registered, attack: {enabled: true, kind: sign_flip, scale: 10.0},
+                        dp: {enabled: true, mode: local, noise_multiplier: 1.0},
+                        defense: {enabled: true, rule: median}}
+      local_dp_fedavg: {weights: registered, attack: {enabled: true, kind: sign_flip, scale: 10.0},
+                        dp: {enabled: true, mode: local, noise_multiplier: 1.0}}

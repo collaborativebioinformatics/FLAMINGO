@@ -1,0 +1,7 @@
+name: secagg
+description: >
+  Secure aggregation by pairwise masking. The server recovers the weighted sum exactly (to
+  2^-24 per coordinate) but no individual update. Assumes an honest-but-curious server that
+  does not collude with sites, and no dropouts.
+secagg: {enabled: true, frac_bits: 24}
+leakage: {enabled: true}

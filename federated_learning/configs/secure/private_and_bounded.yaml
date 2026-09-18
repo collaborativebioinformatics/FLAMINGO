@@ -1,0 +1,8 @@
+name: private_and_bounded
+description: >
+  Central DP with server-side clipping, under a scaling attack from the largest site. The
+  server clips every update to 0.5, including the attacker's, so no site moves the aggregate by
+  more than max_w x 0.5 per round. The same clipping gives the DP guarantee.
+weights: registered
+attack: {enabled: true, kind: scale, scale: 10.0, n_malicious: 1, select: largest}
+dp: {enabled: true, mode: central, clip_norm: 0.5, noise_multiplier: 1.0, delta: 1.0e-5}

@@ -1,0 +1,137 @@
+{
+ "suite": "combined",
+ "settings": {
+  "method": "2sri",
+  "datasets": [
+   "quadratic",
+   "cox"
+  ],
+  "seeds": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9
+  ],
+  "rounds": 5,
+  "epochs": 2,
+  "lr": 0.01
+ },
+ "datasets": [
+  "quadratic",
+  "cox"
+ ],
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9
+ ],
+ "scenarios": {
+  "clean": null,
+  "attack_only": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   }
+  },
+  "central_dp": {
+   "weights": "registered",
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   },
+   "dp": {
+    "enabled": true,
+    "mode": "central",
+    "noise_multiplier": 1.0
+   }
+  },
+  "secagg_only": {
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   },
+   "secagg": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg": {
+   "weights": "registered",
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   },
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 1.0
+   },
+   "secagg": {
+    "enabled": true
+   }
+  },
+  "distributed_secagg_attacker_clips": {
+   "weights": "registered",
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0,
+    "follows_protocol": true
+   },
+   "dp": {
+    "enabled": true,
+    "mode": "distributed",
+    "noise_multiplier": 1.0
+   },
+   "secagg": {
+    "enabled": true
+   }
+  },
+  "local_dp_median": {
+   "weights": "registered",
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   },
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 1.0
+   },
+   "defense": {
+    "enabled": true,
+    "rule": "median"
+   }
+  },
+  "local_dp_fedavg": {
+   "weights": "registered",
+   "attack": {
+    "enabled": true,
+    "kind": "sign_flip",
+    "scale": 10.0
+   },
+   "dp": {
+    "enabled": true,
+    "mode": "local",
+    "noise_multiplier": 1.0
+   }
+  }
+ }
+}

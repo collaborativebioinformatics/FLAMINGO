@@ -1,0 +1,6 @@
+name: robust_normbound
+description: >
+  Sign-flip attack; the server scales every update to at most the median update norm of the
+  round, then takes the weighted mean. Bounds each site's influence, does not remove it.
+attack: {enabled: true, kind: sign_flip, scale: 10.0, n_malicious: 1, select: largest}
+defense: {enabled: true, rule: fedavg, norm_bound: adaptive, norm_bound_multiplier: 1.0}

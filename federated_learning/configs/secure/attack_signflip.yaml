@@ -1,0 +1,4 @@
+name: attack_signflip
+description: >
+  The largest site (most FedAvg weight) sends -10 x its update every round. No defense.
+attack: {enabled: true, kind: sign_flip, scale: 10.0, n_malicious: 1, select: largest}

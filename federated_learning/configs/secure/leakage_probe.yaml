@@ -1,0 +1,6 @@
+name: leakage_probe
+description: >
+  Plain FedAvg with the leakage probes on. Training is FedAvg on updates, identical to the
+  default run up to float rounding. Logs how much of each site's true update the server sees
+  and a loss-based membership-inference AUC.
+leakage: {enabled: true}

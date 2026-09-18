@@ -1,0 +1,6 @@
+name: robust_geomedian
+description: >
+  Sign-flip attack, aggregated by the weighted geometric median (RFA, smoothed Weiszfeld).
+  Assumes honest sites hold more than half the weight.
+attack: {enabled: true, kind: sign_flip, scale: 10.0, n_malicious: 1, select: largest}
+defense: {enabled: true, rule: geometric_median}
