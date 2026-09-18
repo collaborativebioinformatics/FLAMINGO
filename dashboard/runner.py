@@ -41,7 +41,7 @@ DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 # The repository is one environment, so every step runs in this interpreter.
 # Both overrides remain for pointing a step at a separate environment.
 FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
-FL_METHODS = ("naive", "2sri", "2sps")
+FL_METHODS = ("naive", "2sri", "2sps", "fedmr")
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
@@ -50,7 +50,7 @@ CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recove
 # so they deliberately stay out of the run id.
 EXPERIMENT_DEFAULTS: dict = {
     "run_federated": True,
-    "fl_methods": ["naive", "2sri"],
+    "fl_methods": ["naive", "2sri", "fedmr"],
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
@@ -205,6 +205,7 @@ METHOD_LABELS = {
     "naive": "Federated · naive (no instruments)",
     "2sri": "Federated · 2SRI (control function)",
     "2sps": "Federated · 2SPS (predicted exposure)",
+    "fedmr": "Federated · FedMR (exact 2SLS from summed statistics)",
 }
 
 
@@ -241,7 +242,7 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (NVFlare FedAvg)",
+        label="Federated learning (NVFlare FedAvg and FedMR)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
@@ -424,6 +425,8 @@ _PATTERNS = {
     "meta_ivw": rf"meta IVW\s+{_NUM}\s+se\s+{_NUM}",
     "pooled": rf"pooled (?:2SLS|2SPS Cox)\s+{_NUM}\s+se\s+{_NUM}",
     "pooled_naive": rf"pooled naive\s+{_NUM}",
+    # `federated FedMR: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
+    "fedmr": rf"federated FedMR:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
     "heterogeneity_q": rf"heterogeneity Q\s+{_NUM}",
     "model_sumstats": rf"model sumstats[^:]*:\s*theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
     "pooled_quadratic": rf"concatenated quadratic 2SLS:\s+theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
@@ -452,7 +455,7 @@ def parse_summary(output: str) -> dict:
     for name, pattern in _PATTERNS.items():
         m = re.search(pattern, output)
         if m:
-            found[name] = tuple(float(g) for g in m.groups())
+            found[name] = tuple(float(g) for g in m.groups() if g is not None)
     target = re.search(r"target \((.+?)\)\s+heterogeneity", output)
     if target:
         found["target_label"] = target.group(1)

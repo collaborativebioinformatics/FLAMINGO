@@ -219,9 +219,22 @@ def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, targ
     fig.savefig(out)
 
 
-def fedmr_row(dataset: str, curved: bool) -> tuple[float, float, float | None, float | None] | None:
-    """FedMR estimate from results/fedmr.<dataset>.csv (scripts/federated_exact_mr.py), or None.
-    Returns (theta1, se1, theta2, se2); theta2 and se2 are None for the linear layout."""
+def fedmr_row(dataset: str, curved: bool,
+              root: Path = FL_RESULTS) -> tuple[float, float, float | None, float | None] | None:
+    """FedMR estimate for the forest, or None. Returns (theta1, se1, theta2, se2); theta2 and
+    se2 are None for the linear basis.
+
+    First choice is the federation's own run, <root>/fedmr/<dataset>/metrics.csv from
+    `federated_learning/job.py --method fedmr`, which is what the dashboard produces for
+    every run. When root is the repo's federated_learning/results/ the checked-in analysis
+    results/fedmr.<dataset>.csv (scripts/federated_exact_mr.py) is the fallback; any other
+    root belongs to a different dataset, so that file is not consulted."""
+    run = root / "fedmr" / dataset / "metrics.csv"
+    if run.exists():
+        r = pl.read_csv(run).row(-1, named=True)
+        return (r["theta_X"], r["se_X"], r.get("theta_X2"), r.get("se_X2"))
+    if root != FL_RESULTS:
+        return None
     path = Path("results") / f"fedmr.{dataset}.csv"
     if not path.exists():
         return None
@@ -391,10 +404,10 @@ def main() -> None:
     csv_out, png_out = Path(f"{a.out}.csv"), Path(f"{a.out}.png")
     res.write_csv(csv_out)
     fl = fl_params(a.sites.name, curved, root=a.fl_results)
-    fedmr = fedmr_row(a.sites.name, curved)
+    fedmr = fedmr_row(a.sites.name, curved, a.fl_results)
     if fedmr is None:
-        print(
-            f"no FedMR result at results/fedmr.{a.sites.name}.csv; run scripts/federated_exact_mr.py --shape {a.shape}")
+        print(f"no FedMR run at {a.fl_results / 'fedmr' / a.sites.name}; run federated_learning/job.py "
+              f"--method fedmr (or scripts/federated_exact_mr.py --shape {a.shape} for the checked-in sets)")
     else:
         print(f"federated FedMR: " + "  ".join(f"{v:.3f}" for v in fedmr if v is not None) + "   (exact, with CI)")
     for method, coef in fl.items():
