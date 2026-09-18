@@ -168,9 +168,14 @@ def sidebar_params() -> dict:
 def run_steps(steps, params, paths, force: bool) -> dict:
     """Execute steps in order, stopping at the first failure. Returns key -> StepResult."""
     results = {}
+    # Later steps read what earlier ones wrote: the MR scripts overlay the
+    # federated curves. So once a step actually runs, everything downstream of it
+    # has to run too, or it would replay results computed from the old inputs.
+    stale = force
     for step in steps:
         with st.status(f"{step.label}…", expanded=False) as status:
-            result = runner.execute(step, params, paths, force=force)
+            result = runner.execute(step, params, paths, force=stale)
+            stale = stale or not result.cached
             results[step.key] = result
             if result.cached:
                 status.update(label=f"{step.label} — cached", state="complete")
@@ -197,8 +202,8 @@ def show_outputs(step, params, paths) -> None:
             st.caption(label)
             st.dataframe(pl.read_csv(path), width="stretch", hide_index=True)
         with open(path, "rb") as fh:
-            st.download_button(f"Download {path.name}", fh.read(), file_name=path.name,
-                               key=f"dl-{paths.root.name}-{path.name}")
+            st.download_button(f"Download {label} ({path.name})", fh.read(), file_name=path.name,
+                               key=f"dl-{paths.root.name}-{step.key}-{label}")
 
 
 def headline_metrics(summary: dict) -> None:
@@ -235,6 +240,42 @@ def headline_metrics(summary: dict) -> None:
         st.caption(f"Target: {summary['target_label']}")
     st.caption("Pink travels between sites · dashed needs pooled individual rows "
                "(benchmark only) · coral is the confounded estimate MR is there to beat.")
+
+
+def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFrame:
+    """One row per estimator, with what each is allowed to see.
+
+    The point of the comparison is that the rows needing individual-level data
+    are benchmarks a real federation could not run.
+    """
+    curved = params["shape"] in runner.CURVED_SHAPES
+
+    def row(estimator, sees, theta1=None, theta2=None, se1=None):
+        return {"estimator": estimator, "sees": sees,
+                "θ1": theta1, "θ1 se": se1, "θ2": theta2}
+
+    rows = [row("Truth", "simulation parameters", params["theta1"],
+                params.get("theta2") if curved else None)]
+    if "meta_ivw" in summary:
+        est, se = summary["meta_ivw"]
+        rows.append(row("Summary-stat IVW meta", "per-SNP summary statistics", est,
+                        None, se))
+    if curved and "model_sumstats" in summary:
+        t1, se1, t2, _ = summary["model_sumstats"]
+        rows.append(row("Summary-stat model meta", "per-site quadratic fits", t1, t2, se1))
+    if curved and "pooled_quadratic" in summary:
+        t1, se1, t2, _ = summary["pooled_quadratic"]
+        rows.append(row("Concatenated quadratic 2SLS", "pooled individual rows", t1, t2, se1))
+    elif "pooled" in summary:
+        est, se = summary["pooled"]
+        rows.append(row("Concatenated 2SLS", "pooled individual rows", est, None, se))
+    for method, coef in sorted(federated.items()):
+        rows.append(row(f"Federated FedAvg · {method}", "model updates only",
+                        coef[0], coef[1] if len(coef) > 1 else None))
+    if "pooled_naive" in summary:
+        rows.append(row("Pooled naive (no instruments)", "pooled individual rows",
+                        summary["pooled_naive"][0], None))
+    return pl.DataFrame(rows, infer_schema_length=None)
 
 
 params = sidebar_params()
@@ -297,38 +338,99 @@ with tab_data:
         st.info("No data for this parameter set yet — press **Generate sites**.")
 
 with tab_experiments:
-    st.subheader("Run the experiment chain")
-    chain = " → ".join(s.label.split(" (")[0] for s in steps)
-    st.markdown(f"**{chain}**")
-    if st.button("Run experiments", type="primary"):
-        runner.save_params(params, paths)
-        results = run_steps(steps, params, paths, force)
-        if results and all(r.ok for r in results.values()):
-            st.rerun()
+    assets = runner.data_assets()
+    if not assets:
+        st.info("No simulated data yet — generate a dataset on the "
+                "**1 · Data generation** tab first.")
+    else:
+        st.subheader("Select a data asset")
+        ids = [a["run_id"] for a in assets]
+        default = ids.index(paths.root.name) if paths.root.name in ids else 0
+        choice = st.selectbox(
+            "Simulated dataset", range(len(assets)), index=default,
+            format_func=lambda i: runner.asset_label(assets[i]),
+            help="Every dataset generated on the first tab. Defaults to the one "
+                 "matching the sidebar parameters.",
+        )
+        asset = assets[choice]
+        run_params = dict(asset["params"])
+        run_paths = asset["paths"]
 
-    summary_step = runner.STEPS["summary_mr"]
-    if runner.is_complete(summary_step, params, paths):
-        log = paths.logs / "summary_mr.log"
-        if log.exists():
+        st.subheader("Federated learning")
+        available = runner.fl_available()
+        if not available:
+            st.warning(
+                f"No interpreter at `{runner.FL_PYTHON}`. Run `uv sync` in "
+                "`federated_learning/`, or set `FLAMINGO_FL_PYTHON` to an environment "
+                "with torch and NVFlare. The MR steps below run without it."
+            )
+        run_params["run_federated"] = st.checkbox(
+            "Run the federated workflow", value=available, disabled=not available,
+            help="Trains one client per site with FedAvg, then overlays the federated "
+                 "curve on the MR plots below.",
+        )
+        c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
+        run_params["fl_methods"] = c1.multiselect(
+            "Methods", runner.FL_METHODS, default=runner.EXPERIMENT_DEFAULTS["fl_methods"],
+            disabled=not run_params["run_federated"],
+            help="naive: outcome on X directly, the confounded association. "
+                 "2sri: site-local first stage, then a federated control function. "
+                 "2sps: site-local first stage, then federated on the predicted X.",
+        )
+        run_params["fl_engine"] = c2.selectbox(
+            "Engine", ["local", "nvflare"], disabled=not run_params["run_federated"],
+            help="local reproduces FedAvg's arithmetic in-process in seconds; nvflare "
+                 "stands up the real simulated federation and costs about 40 s per job.",
+        )
+        run_params["fl_rounds"] = c3.number_input(
+            "Rounds", 1, 50, runner.EXPERIMENT_DEFAULTS["fl_rounds"],
+            disabled=not run_params["run_federated"])
+        run_params["fl_epochs"] = c4.number_input(
+            "Local epochs", 1, 20, runner.EXPERIMENT_DEFAULTS["fl_epochs"],
+            disabled=not run_params["run_federated"])
+
+        steps = runner.steps_for(run_params)
+        st.subheader("Run the experiment chain")
+        st.markdown("**" + " → ".join(s.label.split(" (")[0] for s in steps) + "**")
+        st.caption("The federated step runs before the MR steps so its curves appear "
+                   "on the forest and dose-response plots.")
+        if st.button("Run experiments", type="primary"):
+            runner.save_params(run_params, run_paths)
+            results = run_steps(steps, run_params, run_paths, force)
+            if results and all(r.ok for r in results.values()):
+                st.rerun()
+
+        summary_step = runner.STEPS["summary_mr"]
+        if runner.is_complete(summary_step, run_params, run_paths):
+            log = (run_paths.logs / "summary_mr.log")
+            summary = runner.parse_summary(log.read_text()) if log.exists() else {}
+            federated = runner.parse_federated(log.read_text()) if log.exists() else {}
+
             st.divider()
             st.subheader("Key results")
-            headline_metrics(runner.parse_summary(log.read_text()))
+            headline_metrics(summary)
 
-        st.divider()
-        for step in steps:
-            if step.key == "simulate":
-                continue
-            st.markdown(f"#### {step.label}")
-            show_outputs(step, params, paths)
+            st.markdown("#### All estimators")
+            st.caption("Every row targets the same causal curve; they differ in what "
+                       "each one is allowed to see.")
+            st.dataframe(comparison_table(summary, federated, run_params),
+                         width="stretch", hide_index=True)
 
-        with st.expander("Step logs"):
+            st.divider()
             for step in steps:
-                log = paths.logs / f"{step.key}.log"
-                if log.exists():
-                    st.caption(step.label)
-                    st.code(log.read_text(), language="text")
-    else:
-        st.info("No results for this parameter set yet — press **Run experiments**.")
+                if step.key == "simulate":
+                    continue
+                st.markdown(f"#### {step.label}")
+                show_outputs(step, run_params, run_paths)
+
+            with st.expander("Step logs"):
+                for step in steps:
+                    step_log = run_paths.logs / f"{step.key}.log"
+                    if step_log.exists():
+                        st.caption(step.label)
+                        st.code(step_log.read_text(), language="text")
+        else:
+            st.info("No results for this data asset yet — press **Run experiments**.")
 
     with st.expander("Previous runs"):
         rows = [{"run_id": r["run_id"], **r["params"]} for r in runner.list_runs()]

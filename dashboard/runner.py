@@ -30,6 +30,7 @@ from typing import Callable
 REPO = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO / "data"
 SCRIPTS = DATA_DIR / "scripts"
+FL_DIR = REPO / "federated_learning"
 RUNS_ROOT = DATA_DIR / "results" / "dashboard_runs"
 
 # The dashboard environment carries the data/ dependencies, so its own
@@ -37,8 +38,23 @@ RUNS_ROOT = DATA_DIR / "results" / "dashboard_runs"
 # two environments separate.
 DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 
+# The federated step needs torch and NVFlare, which the dashboard does not carry,
+# so it runs in federated_learning's own environment.
+FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", str(FL_DIR / ".venv" / "bin" / "python"))
+FL_METHODS = ("naive", "2sri", "2sps")
+
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
+
+# Options that change what is run over a dataset, rather than the dataset itself,
+# so they deliberately stay out of the run id.
+EXPERIMENT_DEFAULTS: dict = {
+    "run_federated": True,
+    "fl_methods": ["naive", "2sri"],
+    "fl_engine": "local",
+    "fl_rounds": 5,
+    "fl_epochs": 2,
+}
 
 DEFAULTS: dict = {
     "shape": "quadratic",
@@ -67,6 +83,14 @@ def canonical(params: dict) -> dict:
     if p["shape"] != "cox":
         p.pop("censor_frac")
         p.pop("followup")
+    return p
+
+
+def full(params: dict) -> dict:
+    """Data parameters, which identify the run, plus experiment options, which do not."""
+    p = canonical(params)
+    for key, default in EXPERIMENT_DEFAULTS.items():
+        p[key] = params.get(key, default)
     return p
 
 
@@ -100,13 +124,18 @@ class RunPaths:
         """
         return self.root / "fl"
 
+    @property
+    def sites(self) -> Path:
+        """Parent of the per-shape site directories; job.py's --fed_dir."""
+        return self.root / "sites"
+
     def sites_for(self, shape: str) -> Path:
         """Site CSVs for `shape`.
 
         The directory is named after the shape on purpose: federated_summary_mr.py
         derives the FL dataset name from the sites directory's name.
         """
-        return self.root / "sites" / shape
+        return self.sites / shape
 
     def mkdirs(self) -> None:
         for d in (self.results, self.logs, self.fl):
@@ -125,6 +154,10 @@ class Step:
     argv: Callable[[dict, RunPaths], list]
     outputs: Callable[[dict, RunPaths], dict]
     applies: Callable[[dict], bool] = lambda p: True
+    # Settings that a stored result must have been produced under to be reusable.
+    # Output paths alone are not enough: rerunning with more rounds writes the
+    # same file names, so without this a changed setting would look cached.
+    signature: Callable[[dict], dict] = lambda p: {}
     python: str = field(default=DATA_PYTHON)
     cwd: Path = field(default=DATA_DIR)
 
@@ -151,6 +184,30 @@ def _simulate_argv(p: dict, paths: RunPaths) -> list:
     return argv
 
 
+def _federated_argv(p: dict, paths: RunPaths) -> list:
+    argv = [
+        "--dataset", p["shape"],
+        # job.py joins fed_dir with the dataset name, which is the shape
+        "--fed_dir", paths.sites,
+        "--results_root", paths.fl,
+        "--workspace", paths.root / "fl_workspace",
+        "--engine", p["fl_engine"],
+        "--rounds", p["fl_rounds"],
+        "--epochs", p["fl_epochs"],
+    ]
+    for method in p["fl_methods"]:
+        argv += ["--method", method]
+    return argv
+
+
+def _federated_outputs(p: dict, paths: RunPaths) -> dict:
+    out = {}
+    for method in p["fl_methods"]:
+        out[f"{method}: fitted curve"] = paths.fl / method / p["shape"] / "fitted_curve.png"
+    out["all methods"] = paths.fl / "fitted_curves_all.png"
+    return out
+
+
 def _sumstats_stem(p: dict, paths: RunPaths) -> Path:
     return paths.results / f"sumstats.{p['shape']}"
 
@@ -169,6 +226,20 @@ PIPELINE: tuple[Step, ...] = (
             "manifest (csv)": paths.sites_for(p["shape"]) / "manifest.csv",
             "manifest (json)": paths.sites_for(p["shape"]) / "manifest.json",
         },
+    ),
+    # Before the MR steps on purpose: both of them overlay the federated curves
+    # found under the run's fl/ directory, so running this first puts every
+    # estimator on the same forest and dose-response plots.
+    Step(
+        key="federated",
+        label="Federated learning (NVFlare FedAvg)",
+        script=FL_DIR / "job.py",
+        python=FL_PYTHON,
+        cwd=FL_DIR,
+        argv=_federated_argv,
+        outputs=_federated_outputs,
+        signature=lambda p: {k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
+        applies=lambda p: bool(p.get("run_federated")) and bool(p.get("fl_methods")),
     ),
     Step(
         key="summary_mr",
@@ -204,7 +275,7 @@ STEPS = {s.key: s for s in PIPELINE}
 
 
 def steps_for(params: dict) -> list[Step]:
-    p = canonical(params)
+    p = full(params)
     return [s for s in PIPELINE if s.applies(p)]
 
 
@@ -219,14 +290,24 @@ class StepResult:
     cached: bool = False
 
 
+def signature_file(step: Step, paths: RunPaths) -> Path:
+    return paths.logs / f"{step.key}.signature.json"
+
+
 def is_complete(step: Step, params: dict, paths: RunPaths) -> bool:
-    p = canonical(params)
-    return all(path.exists() for path in step.outputs(p, paths).values())
+    p = full(params)
+    if not all(path.exists() for path in step.outputs(p, paths).values()):
+        return False
+    wanted = step.signature(p)
+    if not wanted:
+        return True
+    stored = signature_file(step, paths)
+    return stored.exists() and json.loads(stored.read_text()) == wanted
 
 
 def execute(step: Step, params: dict, paths: RunPaths, force: bool = False) -> StepResult:
     """Run one step, or replay its stored log when its outputs are already there."""
-    params = canonical(params)
+    params = full(params)
     paths.mkdirs()
     log = paths.logs / f"{step.key}.log"
     if not force and is_complete(step, params, paths) and log.exists():
@@ -248,12 +329,22 @@ def execute(step: Step, params: dict, paths: RunPaths, force: bool = False) -> S
     seconds = time.perf_counter() - start
     output = proc.stdout + (f"\n{proc.stderr}" if proc.stderr else "")
     log.write_text(output)
+    if proc.returncode == 0:
+        signature_file(step, paths).write_text(json.dumps(step.signature(params), indent=1))
     return StepResult(step.key, proc.returncode == 0, proc.returncode, command, output, seconds)
 
 
 def save_params(params: dict, paths: RunPaths) -> None:
+    """params.json identifies the dataset; experiment.json records how it was run."""
     paths.mkdirs()
     (paths.root / "params.json").write_text(json.dumps(canonical(params), indent=1))
+    experiment = {k: full(params)[k] for k in EXPERIMENT_DEFAULTS}
+    (paths.root / "experiment.json").write_text(json.dumps(experiment, indent=1))
+
+
+def fl_available() -> bool:
+    """Whether the federated step's interpreter exists; it needs torch and NVFlare."""
+    return Path(FL_PYTHON).exists()
 
 
 def list_runs() -> list[dict]:
@@ -265,6 +356,39 @@ def list_runs() -> list[dict]:
     return runs
 
 
+def data_assets() -> list[dict]:
+    """Simulated datasets that experiments can be run against, newest first.
+
+    A run only counts once its sites are on disk, so this is the set of things
+    stage 2 can be pointed at.
+    """
+    assets = []
+    for params_file in RUNS_ROOT.glob("*/params.json"):
+        params = json.loads(params_file.read_text())
+        paths = RunPaths(params_file.parent)
+        manifest_file = paths.sites_for(params["shape"]) / "manifest.json"
+        if not manifest_file.exists():
+            continue
+        manifest = json.loads(manifest_file.read_text())
+        assets.append({
+            "run_id": paths.root.name,
+            "params": params,
+            "paths": paths,
+            "shape": params["shape"],
+            "n_sites": len(manifest["sites"]),
+            "n": sum(site["n"] for site in manifest["sites"]),
+            "modified": manifest_file.stat().st_mtime,
+        })
+    return sorted(assets, key=lambda a: a["modified"], reverse=True)
+
+
+def asset_label(asset: dict) -> str:
+    p = asset["params"]
+    theta = f"θ1={p['theta1']}" + (f", θ2={p['theta2']}" if "theta2" in p else "")
+    return (f"{asset['shape']} · {asset['n_sites']} sites · {asset['n']:,} individuals · "
+            f"{theta} · seed {p['seed']} · {asset['run_id']}")
+
+
 _NUM = r"(-?\d+\.?\d*)"
 _PATTERNS = {
     "meta_ivw": rf"meta IVW\s+{_NUM}\s+se\s+{_NUM}",
@@ -274,6 +398,18 @@ _PATTERNS = {
     "model_sumstats": rf"model sumstats[^:]*:\s*theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
     "pooled_quadratic": rf"concatenated quadratic 2SLS:\s+theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
 }
+
+
+def parse_federated(output: str) -> dict:
+    """Federated curve parameters that federated_summary_mr.py reports per method.
+
+    The line looks like `federated NVFlare 2sri : 0.295  0.164`; the second
+    number is absent for the shapes with no theta2 to recover.
+    """
+    found = {}
+    for method, numbers in re.findall(r"federated NVFlare\s+(\w+)\s*:\s*([-\d. ]+?)\s{2,}\(", output):
+        found[method] = tuple(float(v) for v in numbers.split())
+    return found
 
 
 def parse_summary(output: str) -> dict:
