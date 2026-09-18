@@ -39,11 +39,13 @@ PALETTES = {
         "rose": "#d4537e", "coral": "#d85a30", "heading": "#72243e",
         "border": "#f4c0d1", "coral-tint": "#faece7", "surface": "#ffffff",
         "ink": "#2c2c2a", "muted": "#6b6a65", "plate-border": "#f4c0d1",
+        "tab-active-bg": "#c2417a", "tab-active-fg": "#ffffff", "tab-hover": "#fbeaf0",
     },
     "dark": {
         "rose": "#e4608f", "coral": "#ee8a5f", "heading": "#f4a9c6",
         "border": "#4a3740", "coral-tint": "#3a2a26", "surface": "#2b2429",
         "ink": "#f3e9ed", "muted": "#b5a5ac", "plate-border": "#4a3740",
+        "tab-active-bg": "#e4608f", "tab-active-fg": "#1f1a1d", "tab-hover": "#33232b",
     },
 }
 
@@ -81,6 +83,37 @@ CSS_TEMPLATE = """
   line-height: 1.25;
 }
 h1, h2, h3 { color: var(--fl-heading) !important; }
+/* Streamlit reserves 6rem above the first element and 10rem below it, and the
+   header strip the top padding has to clear is only 60px tall. */
+[data-testid="stHeader"] { height: 2.75rem !important; min-height: 2.75rem !important; }
+[data-testid="stMainBlockContainer"] { padding-top: 3rem; padding-bottom: 3rem; }
+/* st.logo() is not used, so the strip the sidebar reserves for it is dead space.
+   The collapse button occupies 44px, which is what the header is trimmed to. */
+[data-testid="stSidebarHeader"] { height: 2.75rem !important; min-height: 2.75rem !important; }
+[data-testid="stLogoSpacer"] { display: none; }
+/* Tabs as a segmented control: the scope you are in should read as a pressed
+   button rather than a differently coloured word. */
+[role="tablist"] {
+  /* Streamlit stretches the tab row to the full column width; the box should be
+     only as wide as the buttons in it. max-width keeps the inherited
+     overflow-x: auto scrolling a row too long for the column. */
+  display: inline-flex !important;
+  width: fit-content !important;
+  max-width: 100%;
+  gap: 0.25rem; padding: 0.25rem; margin-bottom: 0.9rem;
+  background: var(--fl-surface); border: 1px solid var(--fl-border);
+  border-radius: 10px;
+}
+[data-testid="stTab"] {
+  padding: 0.35rem 0.9rem !important; border-radius: 7px;
+  font-weight: 600 !important; color: var(--fl-muted) !important;
+  transition: background 120ms ease, color 120ms ease;
+}
+[data-testid="stTab"]:hover { background: var(--fl-tab-hover); }
+[data-testid="stTab"]:hover, [data-testid="stTab"]:hover * { color: var(--fl-ink) !important; }
+[data-testid="stTab"][aria-selected="true"] { background: var(--fl-tab-active-bg); }
+[data-testid="stTab"][aria-selected="true"],
+[data-testid="stTab"][aria-selected="true"] * { color: var(--fl-tab-active-fg) !important; }
 .stat-row {
   display: grid; gap: 0.75rem; margin: 0.2rem 0 0.9rem;
   grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
