@@ -9,17 +9,18 @@ The purpose of this work is to demonstrate the utility of federated learning for
 
 # Quick Start
 
-Requires [uv](https://docs.astral.sh/uv/) (Python >=3.12 for `data/`, 3.10-3.12 for `federated_learning/`).
+Requires [uv](https://docs.astral.sh/uv/) and Python >=3.12. One `uv sync` at the
+root builds a single environment for the whole repository — `data/`,
+`federated_learning/`, `fedmr/` and the dashboard all share it.
 
 ```bash
-# 1. Clone the repo
+# 1. Clone the repo and build the environment (once)
 git clone git@github.com:collaborativebioinformatics/FLAMINGO.git
 cd FLAMINGO
+uv sync
 
 # 2. Simulate ten biobank sites sharing one causal curve
-
 cd data
-uv sync
 uv run python scripts/simulate_federated_sites.py --shape quadratic
 
 # 3. Conventional MR: per-site summary statistics + IVW meta-analysis vs a pooled fit
@@ -34,7 +35,6 @@ uv run pytest -q                                   # identity tests against the 
 
 # 6. Federated learning: NVFlare FedAvg, one simulated client per site
 cd ../federated_learning
-uv sync
 uv run python job.py --dataset quadratic
 
 # 7. FedMR through NVFlare: two rounds, no training, checked against the pooled fit
@@ -43,6 +43,19 @@ uv run python job.py --all --method fedmr
 
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
 FedMR is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
+
+# Interactive dashboard
+
+To explore the whole pipeline without the command line — set the simulation
+parameters, generate a federation, then run the federated learning and MR
+workflows over it and compare every estimator side by side:
+
+```bash
+cd dashboard
+uv run streamlit run app.py
+```
+
+See [dashboard/README.md](dashboard/README.md).
 
 
 # Intro

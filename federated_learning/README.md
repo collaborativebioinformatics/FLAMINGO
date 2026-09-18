@@ -63,7 +63,7 @@ approximations on the logit and log-hazard scales.
 ## Run
 
 ```bash
-uv sync                                        # nvflare, torch (CPU), pandas, scikit-learn, lifelines, matplotlib
+uv sync                                        # once, at the repository root
 uv run python job.py --dataset quadratic       # 2SRI on one dataset in the NVFlare simulator (~30 s)
 uv run python job.py --all --method naive --method 2sri --method 2sps --engine local --jobs 6   # full sweep, ~1 min
 uv run python job.py --all --method fedmr           # exact federated 2SLS on every continuous set (~40 s each)

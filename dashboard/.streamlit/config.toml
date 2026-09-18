@@ -1,0 +1,45 @@
+# Palette lifted from the pipeline figure in the repository README
+# (flamingo_pipeline.png) and the logo: in the figure pink marks the causal
+# pathway and what travels between sites, coral marks what differs per site and
+# the confounding. Light mode is the figure's own pale pink page and white
+# cards; dark mode rebuilds the same relationships on the logo's near-black
+# plum. The viewer's browser or OS setting picks between them.
+[theme]
+primaryColor = "#c2417a"   # deep pink from the logo; carries white button text in both modes
+baseRadius = "medium"
+
+[theme.light]
+backgroundColor = "#fdf6f8"           # figure page background
+secondaryBackgroundColor = "#ffffff"  # figure cards
+textColor = "#2c2c2a"
+linkColor = "#a8345f"
+borderColor = "#f4c0d1"
+codeBackgroundColor = "#fbeaf0"
+chartCategoricalColors = ["#d4537e", "#d85a30", "#72243e", "#ecb1c5", "#f5c4b3", "#6b6a65"]
+# st.info carries the "blue" semantic colours; recolour only that one so the
+# notices sit in the palette. Error, warning and success keep their own hues.
+blueBackgroundColor = "#fbeaf0"
+blueTextColor = "#72243e"
+blueColor = "#d4537e"
+
+[theme.light.sidebar]
+backgroundColor = "#fbeaf0"
+secondaryBackgroundColor = "#ffffff"
+borderColor = "#f4c0d1"
+
+[theme.dark]
+backgroundColor = "#1f1a1d"           # the logo's own near-black
+secondaryBackgroundColor = "#2b2429"
+textColor = "#f3e9ed"
+linkColor = "#f19ebc"
+borderColor = "#4a3740"
+codeBackgroundColor = "#2b2429"
+chartCategoricalColors = ["#e4608f", "#ee8a5f", "#f4a9c6", "#c2417a", "#d8a08a", "#b5a5ac"]
+blueBackgroundColor = "#33232b"
+blueTextColor = "#f4a9c6"
+blueColor = "#e4608f"
+
+[theme.dark.sidebar]
+backgroundColor = "#271f24"
+secondaryBackgroundColor = "#2b2429"
+borderColor = "#4a3740"
