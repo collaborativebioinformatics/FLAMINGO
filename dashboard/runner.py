@@ -200,11 +200,20 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
     return argv
 
 
+# Output labels double as section headings in the dashboard, so they read as titles.
+METHOD_LABELS = {
+    "naive": "Federated · naive (no instruments)",
+    "2sri": "Federated · 2SRI (control function)",
+    "2sps": "Federated · 2SPS (predicted exposure)",
+}
+
+
 def _federated_outputs(p: dict, paths: RunPaths) -> dict:
     out = {}
     for method in p["fl_methods"]:
-        out[f"{method}: fitted curve"] = paths.fl / method / p["shape"] / "fitted_curve.png"
-    out["all methods"] = paths.fl / "fitted_curves_all.png"
+        label = METHOD_LABELS.get(method, f"Federated · {method}")
+        out[label] = paths.fl / method / p["shape"] / "fitted_curve.png"
+    out["Federated · all methods"] = paths.fl / "fitted_curves_all.png"
     return out
 
 
@@ -223,8 +232,8 @@ PIPELINE: tuple[Step, ...] = (
         script=SCRIPTS / "simulate_federated_sites.py",
         argv=_simulate_argv,
         outputs=lambda p, paths: {
-            "manifest (csv)": paths.sites_for(p["shape"]) / "manifest.csv",
-            "manifest (json)": paths.sites_for(p["shape"]) / "manifest.json",
+            "Site manifest": paths.sites_for(p["shape"]) / "manifest.csv",
+            "Site manifest (json)": paths.sites_for(p["shape"]) / "manifest.json",
         },
     ),
     # Before the MR steps on purpose: both of them overlay the federated curves
@@ -252,8 +261,8 @@ PIPELINE: tuple[Step, ...] = (
             "--fl-results", paths.fl,
         ],
         outputs=lambda p, paths: {
-            "forest plot": Path(f"{_sumstats_stem(p, paths)}.png"),
-            "per-site estimates": Path(f"{_sumstats_stem(p, paths)}.csv"),
+            "Forest plot": Path(f"{_sumstats_stem(p, paths)}.png"),
+            "Per-site estimates": Path(f"{_sumstats_stem(p, paths)}.csv"),
         },
     ),
     Step(
@@ -266,12 +275,29 @@ PIPELINE: tuple[Step, ...] = (
             "--out", _nonlinear_png(p, paths),
             "--federated", paths.fl,
         ],
-        outputs=lambda p, paths: {"dose-response curve": _nonlinear_png(p, paths)},
+        outputs=lambda p, paths: {"Dose–response curve": _nonlinear_png(p, paths)},
         applies=lambda p: p["shape"] in CURVED_SHAPES,
     ),
 )
 
 STEPS = {s.key: s for s in PIPELINE}
+
+# What the results page leads with: the dose-response curve where the shape has
+# one to recover, otherwise the forest plot.
+HERO_OUTPUTS = (("nonlinear_mr", "Dose–response curve"), ("summary_mr", "Forest plot"))
+
+
+def hero_output(params: dict, paths: RunPaths):
+    """(step, label, path) for the headline figure, or None if it is not there yet."""
+    p = full(params)
+    available = {s.key for s in steps_for(p)}
+    for key, label in HERO_OUTPUTS:
+        if key not in available:
+            continue
+        path = STEPS[key].outputs(p, paths).get(label)
+        if path and path.exists():
+            return STEPS[key], label, path
+    return None
 
 
 def steps_for(params: dict) -> list[Step]:

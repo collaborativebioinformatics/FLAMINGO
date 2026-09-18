@@ -40,17 +40,18 @@ CSS = """
   --fl-muted: #6b6a65;
 }
 .fl-header {
-  display: flex; align-items: center; gap: 0.9rem;
-  padding-bottom: 1rem; margin-bottom: 1.1rem;
+  display: flex; align-items: center; gap: 0.7rem;
+  padding-bottom: 0.8rem; margin-bottom: 0.4rem;
   border-bottom: 2px solid var(--fl-border);
 }
-.fl-header img { width: 52px; height: 52px; border-radius: 14px; }
+.fl-header img { width: 42px; height: 42px; border-radius: 11px; }
 .fl-header .fl-title {
   margin: 0; line-height: 1.05; color: var(--fl-maroon);
-  font-size: 2.05rem !important; font-weight: 800 !important; letter-spacing: 0.02em;
+  font-size: 1.45rem !important; font-weight: 800 !important; letter-spacing: 0.02em;
 }
 .fl-header .fl-sub {
-  margin: 0.28rem 0 0; color: var(--fl-muted); font-size: 0.95rem !important;
+  margin: 0.2rem 0 0; color: var(--fl-muted); font-size: 0.72rem !important;
+  line-height: 1.25;
 }
 h1, h2, h3 { color: var(--fl-maroon) !important; }
 .stat-row {
@@ -99,6 +100,16 @@ SHAPE_HELP = {
     "threshold": "Y is flat until the cutoff θ2, then rises with slope θ1.",
     "cox": "Survival outcome; θ1 is a log hazard ratio. θ2 is unused.",
 }
+
+
+def sidebar_header() -> None:
+    st.sidebar.markdown(
+        f'<div class="fl-header"><img src="{logo_data_uri()}" alt="FLAMINGO logo">'
+        '<div><p class="fl-title">FLAMINGO</p>'
+        '<p class="fl-sub">Federated Non-Linear<br>Mendelian Randomization</p>'
+        '</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def sidebar_params() -> dict:
@@ -190,19 +201,26 @@ def run_steps(steps, params, paths, force: bool) -> dict:
     return results
 
 
-def show_outputs(step, params, paths) -> None:
-    """Figures inline, tables as dataframes, everything downloadable."""
+def output_block(step, label, path, paths, level: str = "####") -> None:
+    """One heading row — title on the left, its download on the right — then the asset."""
+    heading, action = st.columns([5, 1], vertical_alignment="bottom")
+    heading.markdown(f"{level} {label}")
+    with open(path, "rb") as fh:
+        action.download_button("Download", fh.read(), file_name=path.name,
+                               key=f"dl-{paths.root.name}-{step.key}-{label}",
+                               width="stretch")
+    if path.suffix == ".png":
+        st.image(str(path), width="stretch")
+    elif path.suffix == ".csv":
+        st.dataframe(pl.read_csv(path), width="stretch", hide_index=True)
+
+
+def show_outputs(step, params, paths, skip: set | None = None) -> None:
+    """Every asset a step produced, each under its own heading."""
     for label, path in step.outputs(params, paths).items():
-        if not path.exists():
+        if not path.exists() or (skip and (step.key, label) in skip):
             continue
-        if path.suffix == ".png":
-            st.image(str(path), caption=label, width="stretch")
-        elif path.suffix == ".csv":
-            st.caption(label)
-            st.dataframe(pl.read_csv(path), width="stretch", hide_index=True)
-        with open(path, "rb") as fh:
-            st.download_button(f"Download {label} ({path.name})", fh.read(), file_name=path.name,
-                               key=f"dl-{paths.root.name}-{step.key}-{label}")
+        output_block(step, label, path, paths)
 
 
 def headline_metrics(summary: dict) -> None:
@@ -277,19 +295,11 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
     return pl.DataFrame(rows, infer_schema_length=None)
 
 
+st.markdown(CSS, unsafe_allow_html=True)
+sidebar_header()
 params = sidebar_params()
 paths = runner.paths_for(params)
 steps = runner.steps_for(params)
-
-st.markdown(CSS, unsafe_allow_html=True)
-st.markdown(
-    f'<div class="fl-header"><img src="{logo_data_uri()}" alt="FLAMINGO logo">'
-    '<div><p class="fl-title">FLAMINGO</p>'
-    '<p class="fl-sub">Federated Non-Linear Mendelian Randomization — simulate biobank '
-    'sites, then compare conventional MR against pooled and federated estimates.</p>'
-    '</div></div>',
-    unsafe_allow_html=True,
-)
 
 st.sidebar.divider()
 st.sidebar.caption(f"Run `{paths.root.name}`")
@@ -405,6 +415,18 @@ with tab_experiments:
             federated = runner.parse_federated(log.read_text()) if log.exists() else {}
 
             st.divider()
+
+            # The headline figure leads: it is the one plot carrying every
+            # estimator against the truth. It is skipped further down so it is
+            # not shown twice.
+            hero = runner.hero_output(run_params, run_paths)
+            if hero:
+                hero_step, hero_label, hero_path = hero
+                output_block(hero_step, hero_label, hero_path, run_paths, level="###")
+                st.caption("Every estimator against the true curve, over the exposure "
+                           "distribution the sites actually cover.")
+                st.divider()
+
             st.subheader("Key results")
             headline_metrics(summary)
 
@@ -415,11 +437,12 @@ with tab_experiments:
                          width="stretch", hide_index=True)
 
             st.divider()
+            st.subheader("All outputs")
+            skip = {(hero[0].key, hero[1])} if hero else set()
             for step in steps:
                 if step.key == "simulate":
                     continue
-                st.markdown(f"#### {step.label}")
-                show_outputs(step, run_params, run_paths)
+                show_outputs(step, run_params, run_paths, skip=skip)
 
             with st.expander("Step logs"):
                 for step in steps:
