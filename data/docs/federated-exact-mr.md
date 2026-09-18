@@ -47,14 +47,20 @@ The first-stage partial F and partial R² of the excluded instruments come
 from `A`, `B` and `D` alone (nested-model residual sums of squares), so they
 need no extra round. With one endogenous regressor this is the usual
 first-stage F. With two (the quadratic basis) it is a per-column partial F
-and not a conditional (Sanderson-Windmeijer) F; the result flags it.
+and not a conditional (Sanderson-Windmeijer) F; the result flags it. When
+the instrument is a site-generated `xhat`, the F of that one column (about
+5,750 on the linear set) says nothing about the SNPs behind it, so each
+site also releases the residual sums of squares of its own first stage
+(additive across sites) and the coordinator reports the F of the original
+SNP set (28.7 on the linear set, 200 numerator degrees of freedom); the
+single-column value is kept as `generated_instrument_F`.
 
 ## Two protocols
 
 | protocol | instruments | what leaves a site (round 1) | rounds |
 |---|---|---|---|
 | `SharedInstrumentFedMR` | the same harmonized SNPs at every site, one effect allele | centred `G'G` (m x m), `G'X`, `G'Y`, `X'X`, `X'Y`, `Y'Y`, `n` (plus covariate blocks) | 1, + 1 robust |
-| `LocalFirstStageFedMR` | each site's SNPs are its own variants (this repo's default simulator) | the site fits `X ~ [1, G]` itself, forms `xhat`, and releases centred `xhat'xhat`, `xhat'X`, `xhat'Y`, `X'X`, `X'Y`, `Y'Y`, `n`: seven numbers | 1, + 1 robust |
+| `LocalFirstStageFedMR` | each site's SNPs are its own variants (this repo's default simulator) | the site fits `X ~ [1, G]` itself, forms `xhat`, and releases centred `xhat'xhat`, `xhat'X`, `xhat'Y`, `X'X`, `X'Y`, `Y'Y`, `n`, plus the residual sums of squares of `X ~ [1, G]` and `X ~ 1` for the SNP-set F: nine numbers | 1, + 1 robust |
 
 The local-first-stage protocol reproduces `pooled_2sls` in
 `scripts/federated_summary_mr.py` (per-site first stages, site intercepts),
@@ -131,7 +137,7 @@ runs the same way (`--basis quadratic`).
 
 This is distributed statistical estimation, not privacy-preserving
 estimation. The coordinator sees each site's released matrices. For the
-local-first-stage protocol that is seven scalars per site, comparable to
+local-first-stage protocol that is nine scalars per site, comparable to
 publishing the site's own 2SLS summary. For the shared protocol it is the
 site's within-site LD matrix `G'G` and GWAS-level sums `G'X`, `G'Y`, which
 is what a cohort releases in a GWAS meta-analysis, but not less. Secure
@@ -152,4 +158,56 @@ n-weighted mean of the site causal effects, which is what a site-intercept
 2SLS targets when effects differ. Results: `results/fedmr_sweep_summary.csv`
 and `results/fedmr_sweep.png`; the sweep section below is filled from them.
 
-*Sweep results pending: the 100-seed run of `scripts/fedmr_sweep.py` with the corrected estimand is in progress; this section is filled from `results/fedmr_sweep_summary.csv` when it finishes.*
+100 seeds per level, 10 sites of 500 to 5,000 people unless the axis says
+otherwise. Bias and coverage are against the pooled-2SLS limit `theta*`.
+The largest `|FedMR - pooled|` over all 2,200 replicates was 1.7e-15.
+
+| axis | level | mean F | pooled = FedMR: bias (coverage) | FedMR-CF | site meta | sumstats |
+|---|---|---|---|---|---|---|
+| sites | 2 | 17 | 0.011 (0.93) | 0.004 (0.94) | 0.012 (0.93) | 0.011 (0.95) |
+| sites | 20 | 16 | 0.007 (0.92) | 0.000 (0.94) | 0.007 (0.92) | 0.006 (0.93) |
+| instrument strength | h2 0.02 | 3.8 | 0.026 (0.87) | 0.000 (0.93) | 0.026 (0.86) | 0.025 (0.91) |
+| instrument strength | h2 0.05 | 8.5 | 0.011 (0.90) | -0.001 (0.95) | 0.012 (0.91) | 0.011 (0.92) |
+| instrument strength | h2 0.20 | 36 | 0.002 (0.94) | -0.001 (0.94) | 0.002 (0.93) | 0.002 (0.93) |
+| SNPs | 5 | 63 | 0.000 (0.98) | -0.002 (0.98) | 0.000 (0.98) | -0.001 (0.98) |
+| SNPs | 100 | 4.1 | 0.025 (0.72) | -0.001 (0.95) | 0.025 (0.72) | 0.024 (0.73) |
+| imbalance | 90/10 | 17 | 0.004 (0.96) | -0.005 (0.94) | 0.004 (0.95) | 0.003 (0.98) |
+| shared SNPs | same MAF | 154 | 0.004 (0.93) | 0.003 (0.93) | 0.010 (0.88) | 0.010 (0.91) |
+| shared SNPs | MAF shift 1.0 | 141 | 0.003 (0.93) | 0.002 (0.93) | 0.009 (0.91) | 0.009 (0.92) |
+| effect heterogeneity | theta sd 0.2 | 17 | 0.005 (0.94) | -0.001 (0.92) | 0.005 (0.94) | -0.014 (0.88) |
+| pleiotropy | balanced sd 0.02 | 17 | 0.006 (0.84) | -0.001 (0.86) | 0.006 (0.86) | 0.006 (0.87) |
+| pleiotropy | directional mean 0.02 | 17 | 0.006 (0.78) | -0.001 (0.81) | 0.007 (0.77) | 0.006 (0.81) |
+
+Full table: `results/fedmr_sweep_summary.csv`; figure: `results/fedmr_sweep.png`.
+
+What it says:
+
+- **Number of sites and imbalance do not matter** for any route. With one
+  linear effect and site intercepts, pooled 2SLS, the meta-analysis of site
+  2SLS fits and per-SNP IVW are the same estimator up to weights, and
+  FedMR is the pooled one exactly.
+- **Weak instruments are where the routes separate, and only cross-fitting
+  helps.** At F near 4 (either `h2_x` = 0.02 or 100 SNPs) every one-sample
+  route leans about 0.025 towards the confounded OLS value and coverage
+  falls to 0.72 to 0.87. Cross-fitted FedMR removes the lean (bias within
+  0.001) and restores 0.93 to 0.95 coverage, at the price of a wider SE
+  (0.060 against 0.039 at `h2_x` = 0.02, but 0.024 against 0.017 with 100
+  SNPs, where it also has the lower RMSE). The hypothesis that out-of-fold
+  instruments cut the one-sample lean is supported in these settings.
+- **Shared SNPs favour the pooled first stage.** With the same 20 variants
+  everywhere, the global first stage has F about 150 while each site's own
+  first stage has F about 15, so the site-level routes (site meta, sumstats)
+  keep a lean of 0.010 that the pooled and shared-instrument FedMR fits do
+  not (0.004). MAF shifts of up to 1.0 on the logit scale do not change
+  this.
+- **Effect heterogeneity is a question of estimand, not of federation.**
+  Pooled 2SLS, FedMR and site meta-analysis all sit on the first-stage-
+  weighted mean; per-SNP IVW, whose weights are the SNP-level precisions,
+  drifts to -0.014 with coverage 0.88 at `theta` sd 0.2.
+- **Pleiotropy hurts every route equally.** Direct SNP-to-outcome effects
+  of sd 0.02 per allele leave the bias unchanged on average (the SNP
+  effects on X have random signs, so `sum alpha_j beta_j` averages zero)
+  but add variance the SEs do not see: coverage drops to about 0.85
+  (balanced) and 0.78 (directional) for all four routes, cross-fitting
+  included. Nothing about summing sufficient statistics protects against
+  invalid instruments; that is a job for pleiotropy-robust estimators.

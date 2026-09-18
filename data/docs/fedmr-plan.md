@@ -137,21 +137,16 @@ NVFlare client and the analysis scripts run the same arithmetic.
 7. **Nonlinear generated-instrument protocol**: done for the quadratic
    basis, both protocols, tested against `quadratic_2sls` and a stacked
    reference.
-8. **Cross-fitting and sweeps** (`scripts/fedmr_sweep.py`): implemented;
-   the 100-seed run is in progress and its numbers go into the docs when it
-   finishes (the sweep sections there are marked as pending until then).
-   Bias, RMSE and coverage for pooled / FedMR-CF / site meta / sumstats along
-   sites, instrument strength, SNP count, imbalance, MAF shift, effect
-   heterogeneity and pleiotropy. Under effect heterogeneity the estimand is
-   the pooled 2SLS limit, `theta* = (B'A^-1 sum_k B_k theta_k) / (B'A^-1 B)`,
-   a first-stage-weighted mean of the site effects computed per replicate
-   from the realised first-stage matrices; it is *not* the n-weighted mean
-   (an earlier draft of this plan said so and was wrong), and the
-   inverse-variance-weighted routes target a slightly different mean.
-9. **Docs and manuscript**: written (`data/docs/federated-exact-mr.md`,
+8. **Cross-fitting and sweeps** (`scripts/fedmr_sweep.py`): done, 100
+   seeds per level; results in `federated-exact-mr.md`. Under effect
+   heterogeneity the estimand is the pooled 2SLS limit,
+   `theta* = (B'A^-1 sum_k B_k theta_k) / (B'A^-1 B)`, a first-stage-weighted
+   mean of the site effects computed per replicate from the realised
+   first-stage matrices; it is *not* the n-weighted mean (an earlier draft
+   of this plan said so and was wrong).
+9. **Docs and manuscript**: done (`data/docs/federated-exact-mr.md`,
    README quick-start steps, both project READMEs, `writing/methods.md` and
-   `results.md`, the two existing federated docs); the sweep sections are
-   pending the run in item 8.
+   `results.md`, the two existing federated docs).
 
 ## Review follow-ups (2026-09-18, second round)
 
