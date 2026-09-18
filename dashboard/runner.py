@@ -63,6 +63,8 @@ EXPERIMENT_DEFAULTS: dict = {
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
+    # bootstrap replicates for the Fed-2SRI confidence band (federated_learning/src/bootstrap.py); 0 = off
+    "fl_bootstrap": 200,
 }
 
 DEFAULTS: dict = {
@@ -211,6 +213,8 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
     if p["shape"] in CURVED_SHAPES:
         # Fed-2SLS on [X, X^2], so it reports theta2 next to the concatenated quadratic fit
         argv += ["--fed2sls_basis", "quadratic"]
+    if p.get("fl_bootstrap") and "2sri" in p["fl_methods"]:
+        argv += ["--bootstrap", p["fl_bootstrap"]]
     return argv
 
 
@@ -264,7 +268,8 @@ PIPELINE: tuple[Step, ...] = (
         cwd=FL_DIR,
         argv=_federated_argv,
         outputs=_federated_outputs,
-        signature=lambda p: {**{k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
+        signature=lambda p: {**{k: p[k] for k in ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs",
+                                                   "fl_bootstrap")},
                              "fed2sls_basis": "quadratic" if p["shape"] in CURVED_SHAPES else "linear"},
         applies=lambda p: bool(p["fl_methods"]),
     ),
@@ -462,6 +467,18 @@ def parse_federated(output: str) -> dict:
     """
     found = {}
     for method, numbers in re.findall(r"federated NVFlare\s+(\w+)\s*:\s*([-\d. ]+?)\s{2,}\(", output):
+        found[method] = tuple(float(v) for v in numbers.split())
+    return found
+
+
+def parse_federated_se(output: str) -> dict:
+    """Bootstrap standard errors of those parameters, when the federated step ran --bootstrap.
+
+    The same line then reads `federated NVFlare 2sri : 0.295  0.164   (from curve,
+    bootstrap B=200: se 0.012  0.020; 95% CI [...] [...])`.
+    """
+    found = {}
+    for method, numbers in re.findall(r"federated NVFlare\s+(\w+)\s*:.*?bootstrap B=\d+: se ([-\d. ]+?);", output):
         found[method] = tuple(float(v) for v in numbers.split())
     return found
 

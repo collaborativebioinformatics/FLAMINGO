@@ -45,12 +45,19 @@ def fmt(m):
 
 
 class Site:
-    def __init__(self, name, data_dir, metrics_dir, method, epochs, lr, batch_size=0, test_size=0.2, seed=0):
+    def __init__(self, name, data_dir, metrics_dir, method, epochs, lr, batch_size=0, test_size=0.2, seed=0,
+                 resample=None):
+        """resample: None, or a numpy SeedSequence entropy list; then the training split is
+        replaced by a bootstrap draw of its rows (with replacement, same size) before the
+        first stage is fitted. Used by bootstrap.py; the test split is never resampled."""
         self.name, self.method, self.epochs, self.lr, self.seed = name, method, epochs, lr, seed
         df = pd.read_csv(os.path.join(data_dir, f"{name}.csv"))
         self.task = detect_task(df, load_manifest(data_dir))
         self.batch_size = batch_size or self.task.default_batch_size
         (self.x_tr, g_tr, self.t_tr), (self.x_te, g_te, self.t_te) = self._split(df, test_size, seed)
+        if resample is not None:
+            idx = torch.as_tensor(np.random.default_rng(resample).integers(0, len(self.x_tr), len(self.x_tr)))
+            self.x_tr, g_tr, self.t_tr = self.x_tr[idx], g_tr[idx], {k: v[idx] for k, v in self.t_tr.items()}
         self.n_train, self.n_test = len(self.x_tr), len(self.x_te)
         if method == "naive":
             self.xhat_tr = self.xhat_te = self.fs_r2 = None

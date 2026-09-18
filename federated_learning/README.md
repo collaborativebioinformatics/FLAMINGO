@@ -53,6 +53,7 @@ approximations on the logit and log-hazard scales.
 | `src/fedsite.py` | One site: 80/20 split, local first stage, local training, evaluation, fitted-curve recording. Shared by both engines |
 | `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
 | `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
+| `src/bootstrap.py` | `--bootstrap B`: resample-refit-retrain replicates and the pointwise percentile band for the FedAvg curves (see "Confidence bands" below) |
 | `src/plots.py` | Per-run metric and fitted-curve plots plus the all-datasets overview |
 | `src/fed2sls_engine.py`, `src/fed2sls_controller.py`, `src/fed2sls_client.py` | The `fed2sls` method: sufficient-statistics client, summing server workflow, in-process engine, identity checks against the in-process and pooled fits, curve and metrics files |
 | `results/fed2sls/<dataset>/estimates.<basis>[.cf<k>].json` | Fed-2SLS full result: estimates, SEs, robust SEs, first-stage diagnostics, rank and conditioning |
@@ -159,6 +160,49 @@ sit. For 2SPS the plot is solid only within two standard deviations of
 outcomes are drawn on the logit scale, which is where the model's `f` lives;
 the binned data points are converted to logits to match. `../data/scripts/federated_nonlinear_mr.py` draws the naive and 2SRI
 curves next to the concatenated 2SLS fit and the summary-statistics IVW line.
+
+## Confidence bands for Fed-2SRI (bootstrap)
+
+A FedAvg fit is a network trained on top of a site-local first stage, so it
+has no closed-form standard error (even classic 2SRI's naive second-stage SE
+ignores the first stage). `--bootstrap B` gets the interval by bootstrapping
+the whole procedure: in each of B replicates every site draws its training
+rows with replacement, refits its first stage, and the federation retrains
+from fresh initial weights. No extra data leaves a site; a replicate is one
+more federated run. The band is the pointwise percentile interval of the
+replicates' final `f(x) - f(0)`.
+
+```bash
+uv run python job.py --dataset quadratic --method 2sri --engine local --bootstrap 200   # ~1.5 min on 16 cores
+```
+
+It adds `curves_bootstrap.csv` (one curve per replicate), `bootstrap.json`,
+and `f_lo` / `f_hi` on the last round of `curves.csv`, so `fitted_curve.png`,
+the dose-response plot and the overview draw the band. The forest plot in
+`../data/scripts/federated_summary_mr.py` projects every replicate on the same
+basis as the point estimate and draws the percentile CI of θ1 (and θ2); its
+printout gives the bootstrap SEs, which the dashboard shows in its table.
+
+What the band assumes (details in `src/bootstrap.py`):
+
+- individuals are independent within a site and sites independent; sites are
+  held fixed, so the band is conditional on these sites;
+- it covers sampling variability of both stages and the randomness of
+  training, not bias: few rounds, weak instruments, or the 2SRI approximation
+  on the logit / log-hazard scale can move the whole band off the truth;
+- it is pointwise, not simultaneous, and zero-width at X = 0 by construction;
+- replicates always run on the local engine (same arithmetic); with
+  `--engine nvflare` only the point estimate comes from NVFlare;
+- not available with `--secure_config`.
+
+On the quadratic set (B = 200) the band contains the true curve at every grid
+point of |X| <= 2. Bootstrap SEs: θ1 0.075, θ2 0.009, against 0.014 and 0.032
+for the exact 2SLS. θ1 carries the confounding correction and depends on the
+weak instruments plus the training randomness. θ2 is tighter because the
+linear control function only corrects the linear part, so the curvature is
+learned from all of X. That extra precision rests on 2SRI's own assumption,
+that the confounding is captured by a linear function of the first-stage
+residual.
 
 ## Robust and privacy-preserving federation (optional)
 
