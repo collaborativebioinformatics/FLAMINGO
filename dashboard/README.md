@@ -18,15 +18,32 @@ SNPs and population sizes, between-site heterogeneity in instrument strength and
 confounding, survival settings, seed — then shows the resulting site manifest,
 size distribution and a preview of any site's individual-level data.
 
-**2 · Experiments & results** runs the chain over that data and shows the
-headline estimates, the forest plot and (for the curved shapes) the
-dose-response plot:
+**2 · Experiments & results** picks one of those datasets, chooses how to run
+the federated workflow over it, runs the chain and compares every estimator:
 
 | step | script | runs for |
 |---|---|---|
 | Simulate sites | `simulate_federated_sites.py` | all shapes |
+| Federated learning | `federated_learning/job.py` | when enabled |
 | Conventional MR | `federated_summary_mr.py` | all shapes |
 | Non-linear MR | `federated_nonlinear_mr.py` | `quadratic`, `threshold` |
+
+The federated step runs **before** the two MR steps on purpose: both of them
+overlay the federated curves they find under the run's `fl/` directory, so this
+ordering puts every estimator on the same forest and dose-response plots. The
+step runs in `federated_learning/`'s own environment, since it needs torch and
+NVFlare; set `FLAMINGO_FL_PYTHON` to point somewhere other than
+`federated_learning/.venv/bin/python`. If that interpreter is missing the tab
+says so and the MR steps still run.
+
+Its `local` engine reproduces FedAvg's arithmetic in-process in seconds and is
+the default; `nvflare` stands up the real simulated federation and costs about
+40 s per job.
+
+The **All estimators** table is the comparison: one row per estimator with what
+each one is allowed to see, from per-SNP summary statistics through model
+updates to pooled individual rows. The rows needing pooled rows are benchmarks a
+real federation could not run.
 
 ## How runs are stored
 
@@ -35,14 +52,22 @@ A run is keyed by a hash of its parameters and written to
 
 ```
 params.json             the canonical parameters behind the hash
+experiment.json         how the chain was run over that data
 sites/<shape>/          site CSVs, truth JSON and the manifest
 results/                sumstats.<shape>.{csv,png}, nonlinear.<shape>.png
-fl/                     federated-learning results root for this run
+fl/                     federated results: <method>/<shape>/{curves,metrics}.csv + plots
+fl_workspace/           the federated run's scratch space
 logs/<step>.log         each step's stdout
 ```
 
 Selecting a parameter set that has already been run brings its results back
 without recomputing; **Force re-run** in the sidebar overrides that.
+
+Reuse is checked two ways, because output paths alone are not enough. A step
+records the settings it ran under (`logs/<step>.signature.json`), so changing
+the federated rounds or engine — which writes the same file names — re-runs it.
+And once any step actually runs, every step after it re-runs too, since they
+consume its output.
 
 Two details are load-bearing:
 
@@ -67,29 +92,26 @@ since they are the published results.
 ## Adding a step
 
 Steps are declared in [`runner.py`](runner.py) and run as subprocesses, so a new
-one needs no changes to the app. Adding the NVFlare job, for example, means
-appending a `Step` that carries its own interpreter and working directory:
+one needs no changes to the app. A `Step` carries its own interpreter and
+working directory, a function building its argv, the files it produces, and
+optionally a `signature` — the settings a stored result must have been produced
+under to count as reusable. The federated step is the worked example:
 
 ```python
 Step(
     key="federated",
     label="Federated learning (NVFlare FedAvg)",
-    script=REPO / "federated_learning" / "job.py",
-    python=os.environ.get(
-        "FLAMINGO_FL_PYTHON",
-        str(REPO / "federated_learning" / ".venv" / "bin" / "python"),
-    ),
-    cwd=REPO / "federated_learning",
-    argv=lambda p, paths: [
-        "--dataset", p["shape"], "--method", "2sri",
-        "--engine", "local",   # the NVFlare simulator costs ~40 s per job
-    ],
-    outputs=lambda p, paths: {
-        "fitted curve": paths.fl / "2sri" / p["shape"] / "fitted_curve.png",
-    },
+    script=FL_DIR / "job.py",
+    python=FL_PYTHON,
+    cwd=FL_DIR,
+    argv=_federated_argv,
+    outputs=_federated_outputs,
+    applies=lambda p: bool(p.get("run_federated")) and bool(p.get("fl_methods")),
+    signature=lambda p: {k: p[k] for k in
+                         ("fl_methods", "fl_engine", "fl_rounds", "fl_epochs")},
 )
 ```
 
-That step is not wired up yet: `job.py` resolves its data and results
-directories relative to the repository, so it needs flags for both before it can
-write into a run directory.
+Parameters that identify the *dataset* belong in `DEFAULTS` and feed the run id;
+parameters that only change *how* it is run belong in `EXPERIMENT_DEFAULTS`,
+which deliberately stay out of the hash so one dataset can be run several ways.

@@ -38,8 +38,9 @@ Results are written to `data/results/` and `federated_learning/results/<dataset>
 
 # Interactive dashboard
 
-To explore the same pipeline without the command line — set the simulation
-parameters, generate a federation and run the MR chain over it:
+To explore the whole pipeline without the command line — set the simulation
+parameters, generate a federation, then run the federated learning and MR
+workflows over it and compare every estimator side by side:
 
 ```bash
 cd dashboard
