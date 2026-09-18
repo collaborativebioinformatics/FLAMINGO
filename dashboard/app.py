@@ -403,9 +403,9 @@ with tab_experiments:
         available = runner.fl_available()
         if not available:
             st.warning(
-                f"No interpreter at `{runner.FL_PYTHON}`. Run `uv sync` in "
-                "`federated_learning/`, or set `FLAMINGO_FL_PYTHON` to an environment "
-                "with torch and NVFlare. The MR steps below run without it."
+                f"`{runner.FL_PYTHON}` cannot import torch and NVFlare. Run `uv sync` "
+                "at the repository root, or set `FLAMINGO_FL_PYTHON` to an environment "
+                "that has them. The MR steps below run without it."
             )
         run_params["run_federated"] = st.checkbox(
             "Run the federated workflow", value=available, disabled=not available,

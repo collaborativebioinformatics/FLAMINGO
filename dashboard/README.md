@@ -5,8 +5,8 @@ set the parameters of a synthetic federation, generate it, and run the
 Mendelian randomization chain over it.
 
 ```bash
+uv sync            # once, at the repository root
 cd dashboard
-uv sync
 uv run streamlit run app.py
 ```
 
@@ -31,10 +31,10 @@ the federated workflow over it, runs the chain and compares every estimator:
 The federated step runs **before** the two MR steps on purpose: both of them
 overlay the federated curves they find under the run's `fl/` directory, so this
 ordering puts every estimator on the same forest and dose-response plots. The
-step runs in `federated_learning/`'s own environment, since it needs torch and
-NVFlare; set `FLAMINGO_FL_PYTHON` to point somewhere other than
-`federated_learning/.venv/bin/python`. If that interpreter is missing the tab
-says so and the MR steps still run.
+repository is one environment, so every step runs in the interpreter the
+dashboard itself is running under; `FLAMINGO_DATA_PYTHON` and
+`FLAMINGO_FL_PYTHON` still point individual steps elsewhere. If that interpreter
+cannot import torch and NVFlare the tab says so and the MR steps still run.
 
 Its `local` engine reproduces FedAvg's arithmetic in-process in seconds and is
 the default; `nvflare` stands up the real simulated federation and costs about

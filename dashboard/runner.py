@@ -38,9 +38,9 @@ RUNS_ROOT = DATA_DIR / "results" / "dashboard_runs"
 # two environments separate.
 DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 
-# The federated step needs torch and NVFlare, which the dashboard does not carry,
-# so it runs in federated_learning's own environment.
-FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", str(FL_DIR / ".venv" / "bin" / "python"))
+# The repository is one environment, so every step runs in this interpreter.
+# Both overrides remain for pointing a step at a separate environment.
+FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
 FL_METHODS = ("naive", "2sri", "2sps")
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
@@ -369,8 +369,12 @@ def save_params(params: dict, paths: RunPaths) -> None:
 
 
 def fl_available() -> bool:
-    """Whether the federated step's interpreter exists; it needs torch and NVFlare."""
-    return Path(FL_PYTHON).exists()
+    """Whether the federated step can run: its interpreter exists and has NVFlare."""
+    if not Path(FL_PYTHON).exists():
+        return False
+    probe = subprocess.run([FL_PYTHON, "-c", "import nvflare, torch"],
+                           capture_output=True, text=True)
+    return probe.returncode == 0
 
 
 def list_runs() -> list[dict]:

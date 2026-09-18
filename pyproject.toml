@@ -1,0 +1,49 @@
+# One environment for the whole repository.
+#
+# `uv sync` at the root builds a single .venv covering the simulation scripts in
+# data/, the NVFlare jobs in federated_learning/, the Streamlit dashboard, and
+# the flamingo-fedmr package in fedmr/. The parts share most of their
+# dependencies and the dashboard shells out to the other two, so splitting them
+# only created environments that could drift apart.
+[project]
+name = "flamingo"
+version = "0.1.0"
+description = "FLAMINGO: federated non-linear Mendelian randomization"
+requires-python = ">=3.12"
+dependencies = [
+    "flamingo-fedmr",
+    # data/ — simulation, summary-statistic MR, non-linear MR
+    "lifelines>=0.30.3",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "polars>=1.44.2",
+    # federated_learning/ — NVFlare FedAvg over the simulated sites
+    "nvflare>=2.6",
+    "torch>=2.4",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    # dashboard/ — Streamlit front end
+    "streamlit>=1.49",
+    "plotly>=5.24",
+    "scipy>=1.13",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]
+
+[tool.uv]
+# The scripts are run directly, not installed, so the root is not a package.
+package = false
+
+[tool.uv.workspace]
+members = ["fedmr"]
+
+[tool.uv.sources]
+flamingo-fedmr = { workspace = true }
+# CPU wheels: the default index would pull a multi-gigabyte CUDA build on Linux.
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
