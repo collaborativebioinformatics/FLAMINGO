@@ -23,14 +23,14 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from simulate_basic import _draw_exposure, _frame, causal_curve  # noqa: E402
+from simulate_basic import _draw_exposure, _frame, _pleiotropy, causal_curve  # noqa: E402
 
 
-def _expit(z):
+def _expit(z) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-z))
 
 
-def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, max_iter=100):
+def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, max_iter=100) -> float:
     """Bisect for alpha such that mean(expit(alpha + z)) ~= prevalence."""
     for _ in range(max_iter):
         mid = (lo + hi) / 2
@@ -44,7 +44,7 @@ def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, m
     return mid
 
 
-def binarize_liability(liability, prevalence, link, rng):
+def binarize_liability(liability, prevalence, link, rng) -> tuple:
     """Turn a continuous liability into a 0/1 outcome at the target prevalence.
 
     'liability': deterministic threshold at the empirical quantile of the
@@ -70,17 +70,17 @@ def binarize_liability(liability, prevalence, link, rng):
 
 
 def simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed,
-                     link="logistic", prevalence=0.3):
+                     link="logistic", prevalence=0.3, maf=None, beta=None, alpha=None) -> tuple:
     """Binary-outcome model: Y = binarize(f(X) + gamma_y U + e_y).
 
     shape: 'linear' (f(x) = theta1 x), 'quadratic', or 'threshold' (see
     causal_curve() in simulate_basic.py for the latter two).
     """
     rng = np.random.default_rng(seed)
-    G, maf, beta, U, X = _draw_exposure(rng, n, n_snps, h2_x, gamma_x)
+    G, maf, beta, U, X, h2_x = _draw_exposure(rng, n, n_snps, h2_x, gamma_x, maf, beta)
     signal = theta1 * X if shape == "linear" else causal_curve(shape, X, theta1, theta2)
     e_y = rng.normal(0.0, 1.0, n)
-    liability = signal + gamma_y * U + e_y
+    liability = signal + _pleiotropy(G, maf, alpha) + gamma_y * U + e_y
     Y, realized_prevalence, intercept = binarize_liability(liability, prevalence, link, rng)
 
     if shape == "quadratic":
@@ -100,7 +100,7 @@ def simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, se
     return _frame(n, G, U, X, Y), truth
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n", type=int, default=10_000)
     p.add_argument("--n-snps", type=int, default=20)

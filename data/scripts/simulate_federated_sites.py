@@ -12,6 +12,9 @@ nuisance parameters differ, mimicking ten biobanks in different countries:
 
 theta1, theta2 (the causal curve) are fixed across all sites: the causal
 effect of X on Y is assumed to be biology, not geography.
+
+Between-site heterogeneity knobs (--shared-snps, --maf-shift, --theta-sd,
+--pleiotropy-*) are defined in heterogeneity.py and off by default.
 """
 
 import argparse
@@ -23,24 +26,25 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
+from heterogeneity import Heterogeneity, add_heterogeneity_args  # noqa: E402
 from simulate_basic import simulate, simulate_nonlinear, simulate_survival  # noqa: E402
 
 
-def sample_population_sizes(rng, n_sites, pop_min, pop_max):
+def sample_population_sizes(rng, n_sites, pop_min, pop_max) -> np.ndarray:
     """One draw per equal-width bin spanning [pop_min, pop_max], so ten sites
     cover the whole range instead of clustering around the mean."""
     edges = np.linspace(pop_min, pop_max, n_sites + 1)
     return np.array([rng.integers(lo, hi + 1) for lo, hi in zip(edges[:-1], edges[1:])])
 
 
-def sample_beta(rng, n_sites, mean, kappa):
+def sample_beta(rng, n_sites, mean, kappa) -> np.ndarray:
     """Beta(mean * kappa, (1 - mean) * kappa): concentration `kappa` controls
     spread around `mean` while keeping draws in (0, 1)."""
     a, b = mean * kappa, (1 - mean) * kappa
     return rng.beta(a, b, size=n_sites)
 
 
-def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa):
+def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamma_mean, gamma_kappa) -> tuple:
     n = sample_population_sizes(rng, n_sites, pop_min, pop_max)
     h2_x = sample_beta(rng, n_sites, h2x_mean, h2x_kappa)
     gamma_x = sample_beta(rng, n_sites, gamma_mean, gamma_kappa)
@@ -51,7 +55,7 @@ def sample_site_params(rng, n_sites, pop_min, pop_max, h2x_mean, h2x_kappa, gamm
     return n, h2_x, gamma_x, gamma_y
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n-sites", type=int, default=10)
     p.add_argument("--n-snps", type=int, default=20)
@@ -69,6 +73,7 @@ def main():
     p.add_argument("--gamma-kappa", type=float, default=20.0, help="Beta concentration for gamma_x, gamma_y")
     p.add_argument("--censor-frac", type=float, default=0.3, help="cox: target fraction randomly censored")
     p.add_argument("--followup", type=float, default=15.0, help="cox: administrative end of follow-up")
+    add_heterogeneity_args(p)
     p.add_argument("--seed", type=int, default=1, help="base seed; site i uses seed + i for its own SNPs/individuals")
     p.add_argument("--out", type=Path, default=None,
                    help="output directory; default simulated_data/federated/<shape>")
@@ -81,21 +86,29 @@ def main():
         rng, a.n_sites, a.pop_min, a.pop_max, a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa
     )
 
+    if a.shape == "cox" and (a.shared_snps or a.pleiotropy_mean or a.pleiotropy_sd):
+        raise SystemExit("--shared-snps and pleiotropy are implemented for the continuous shapes only")
+    het = Heterogeneity(rng, a)
+
     a.out.mkdir(parents=True, exist_ok=True)
     manifest = []
     for i in range(a.n_sites):
         site_seed = a.seed + i + 1
         common = (int(n[i]), a.n_snps)
         nuisance = (float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]), site_seed)
+        extra = het.extra(site_seed)
+        t1 = float(het.theta1[i])
         if a.shape == "linear":
-            df, truth = simulate(*common, a.theta1, *nuisance)
-            truth["avg_slope"] = a.theta1
+            df, truth = simulate(*common, t1, *nuisance, **extra)
+            truth["avg_slope"] = t1
         elif a.shape == "cox":
-            df, truth = simulate_survival(*common, a.theta1, *nuisance,
+            df, truth = simulate_survival(*common, t1, *nuisance,
                                           censor_frac=a.censor_frac, followup=a.followup)
-            truth["avg_slope"] = a.theta1
+            truth["avg_slope"] = t1
         else:
-            df, truth = simulate_nonlinear(*common, a.shape, a.theta1, a.theta2, *nuisance)
+            df, truth = simulate_nonlinear(*common, a.shape, t1, a.theta2, *nuisance, **extra)
+        truth["theta1"] = t1
+        h2_x[i] = truth["h2_x"]           # realized value when SNPs are shared
         site_id = f"site{i + 1:02d}"
         df.write_csv(a.out / f"{site_id}.csv")
         (a.out / f"{site_id}.truth.json").write_text(json.dumps(truth, indent=1))
@@ -103,7 +116,7 @@ def main():
             "site_id": site_id, "n": int(n[i]), "h2_x": float(h2_x[i]),
             **({"events": int(df["event"].sum())} if a.shape == "cox" else {}),
             "gamma_x": float(gamma_x[i]), "gamma_y": float(gamma_y[i]),
-            "avg_slope": truth["avg_slope"], "seed": site_seed,
+            "theta1": t1, "avg_slope": truth["avg_slope"], "seed": site_seed,
         })
         print(f"{site_id}: n={int(n[i]):>6,}  h2_x={h2_x[i]:.3f}  "
               f"gamma_x={gamma_x[i]:.3f}  gamma_y={gamma_y[i]:.3f}")
@@ -112,6 +125,7 @@ def main():
     manifest_df.write_csv(a.out / "manifest.csv")
     (a.out / "manifest.json").write_text(json.dumps({
         "shape": a.shape, "theta1": a.theta1, "theta2": a.theta2, "n_snps": a.n_snps, "seed": a.seed,
+        **het.manifest(),
         **({"censor_frac": a.censor_frac, "followup": a.followup} if a.shape == "cox" else {}),
         "sites": manifest,
     }, indent=1))

@@ -1,0 +1,55 @@
+{
+ "sites": [
+  "site01",
+  "site02",
+  "site03",
+  "site08",
+  "site05",
+  "site04",
+  "site09",
+  "site06",
+  "site10",
+  "site07"
+ ],
+ "N": 55182,
+ "rounds": 2,
+ "spec": {
+  "protocol": "local",
+  "basis": "linear",
+  "crossfit": 0
+ },
+ "w_names": [
+  "X"
+ ],
+ "theta": [
+  0.22414269552420787
+ ],
+ "se": [
+  0.014501429131445885
+ ],
+ "robust_se": [
+  0.014543182797341542
+ ],
+ "rss": 61121.154953371595,
+ "sigma2": 1.1078493221687407,
+ "df_resid": 55171,
+ "diagnostics": {
+  "rank_A": 1,
+  "dim_A": 1,
+  "cond_A": 1.0,
+  "cond_M": 1.0,
+  "n_endogenous": 1,
+  "n_instruments": 1,
+  "n_exogenous": 0,
+  "absorbed": 10,
+  "first_stage": {
+   "X": {
+    "F": 5752.833883283234,
+    "partial_r2": 0.0944266556550661,
+    "df1": 1.0,
+    "df2": 55171.0,
+    "conditional": 1.0
+   }
+  }
+ }
+}

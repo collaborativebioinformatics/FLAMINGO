@@ -53,6 +53,8 @@ approximations on the logit and log-hazard scales.
 | `src/client.py` | NVFlare Client API script: receives the global weights, runs the site's round, sends the weights back |
 | `src/local_engine.py` | In-process FedAvg over the same `Site` objects, no NVFlare processes |
 | `src/plots.py` | Per-run metric and fitted-curve plots plus the all-datasets overview |
+| `fedmr_job.py`, `src/fedmr_controller.py`, `src/fedmr_client.py` | FedMR through NVFlare: sufficient-statistics client, summing server workflow, identity check against the in-process and pooled fits |
+| `results/fedmr/<dataset>/estimates.<basis>.json`, `results/fedmr/summary.csv` | FedMR estimates, SEs, robust SEs, diagnostics, and the identity-check differences |
 | `results/<method>/<dataset>/` | `metrics.csv`, `curves.csv`, `metrics_by_round.{global,local}.png`, `fitted_curve.png` |
 | `results/fitted_curves_all.png`, `results/summary.csv` | Overview across datasets and methods |
 | `workspace/` | Simulator output and per-job logs (git-ignored) |
@@ -66,6 +68,31 @@ uv run python job.py --all --method naive --method 2sri --method 2sps --engine l
 uv run python job.py --dataset cox --method 2sps --rounds 10 --epochs 3 --lr 0.005
 uv run python src/plots.py                     # re-render every plot from results/ without training
 ```
+
+## FedMR: the exact federated 2SLS, no training
+
+`fedmr_job.py` runs a different kind of federation on the same files: each
+client computes the sufficient statistics of a two-stage least squares MR
+(`flamingo_fedmr`, in `../fedmr/`), the server (`src/fedmr_controller.py`,
+a `ModelController` that sums rather than averages) adds them and solves,
+and a second round collects the robust-covariance term. Two rounds, no
+epochs, and the result equals the pooled 2SLS to machine precision, with
+standard errors. Only continuous outcomes.
+
+```bash
+uv run python fedmr_job.py --dataset linear                 # local first stage, 2 rounds
+uv run python fedmr_job.py --dataset linear_shared          # shared SNPs across sites
+uv run python fedmr_job.py --dataset quadratic --basis quadratic
+uv run python fedmr_job.py --all
+```
+
+After each job the script re-runs the protocol in-process on the same
+files and the pooled fit in numpy, and fails unless all three agree to
+1e-10. `results/fedmr/summary.csv` has the estimates; on every set the
+observed differences are at 1e-16. The FedAvg 2SRI model above and FedMR
+answer different questions (a flexible curve without an analytic CI versus
+a specified basis with one), and the forest plots in `../data/results/`
+keep both rows. See `../data/docs/federated-exact-mr.md`.
 
 ## Engines and speed
 
