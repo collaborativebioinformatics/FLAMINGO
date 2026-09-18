@@ -32,7 +32,7 @@ METHOD_STYLE = {                     # fixed colour per method, never cycled
     "naive": dict(color=BLUE, label="federated naive: f(X)"),
     "2sri": dict(color="#4a3aa7", label="federated MR 2SRI: f(X) with control function"),
     "2sps": dict(color="#1baf7a", label="federated MR 2SPS: f(X_hat)"),
-    "fedmr": dict(color="#8a2be2", label="federated MR FedMR: exact 2SLS, 95% band"),
+    "fed2sls": dict(color="#8a2be2", label="federated Fed-2SLS: exact pooled 2SLS, 95% band"),
 }
 METHODS = list(METHOD_STYLE)
 
@@ -147,7 +147,7 @@ def draw_curves(ax, method_runs, task, manifest, data_dir, title):
                     label=f'{st["label"]}, round {last} (solid: |X| <= 2 sd of X_hat = {lim:.1f})')
             ax.plot(x, f, color=st["color"], lw=1.0, ls=":", zorder=3)
             continue
-        if method == "fedmr":
+        if method == "fed2sls":
             band = last_band(curves)
             if band is not None:
                 ax.fill_between(band[0], band[1], band[2], color=st["color"], alpha=0.15, lw=0, zorder=2)
@@ -180,7 +180,7 @@ def plot_dataset(dataset, method, results_root, data_dir, task=None):
         task = detect_task(pd.read_csv(os.path.join(data_dir, "site01.csv"), nrows=2000), manifest)
     results_dir = os.path.join(results_root, method, dataset)
     metrics, curves = _load(results_root, method, dataset)
-    if method != "fedmr":       # fedmr has no per-round test metrics: it is one closed-form solve
+    if method != "fed2sls":       # fed2sls has no per-round test metrics: it is one closed-form solve
         for stage in ("global", "local"):
             plot_metrics(metrics, task, stage, os.path.join(results_dir, f"metrics_by_round.{stage}.png"),
                          dataset, method)
@@ -220,7 +220,7 @@ def plot_overview(datasets, results_root, fed_dir, out):
                 continue
             metrics, curves = loaded
             method_runs[method] = loaded
-            if method == "fedmr":
+            if method == "fed2sls":
                 r = metrics.iloc[-1]
                 rows.append({"dataset": ds, "method": method, "task": task.name, "round": int(r["round"]),
                              **{k: r[k] for k in ("theta_X", "se_X", "robust_se_X", "first_stage_F") if k in r}})
@@ -238,7 +238,7 @@ def plot_overview(datasets, results_root, fed_dir, out):
             handles.setdefault(l.split(", round")[0].split(" (solid")[0], h)
     fig.legend(handles.values(), handles.keys(), frameon=False, fontsize=8, loc="upper right", ncol=2,
                bbox_to_anchor=(0.99, 0.99))
-    fig.suptitle("Federated X -> outcome curve: naive vs MR (FedAvg and FedMR)", x=0.01, ha="left",
+    fig.suptitle("Federated X -> outcome curve: naive vs MR (FedAvg and Fed-2SLS)", x=0.01, ha="left",
                  fontsize=12, color=INK, fontweight="bold")
     fig.text(0.01, 0.925, NOTE, fontsize=8, color=MUTED)
     fig.tight_layout(rect=(0, 0, 1, 0.905))

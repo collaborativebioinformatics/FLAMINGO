@@ -110,7 +110,7 @@ site rows, coloured by family:
 |---|---|---|---|
 | sumstats (orange) | `sumstats` (per-SNP), and `sumstats: site models` for curved shapes | per-SNP GWAS effects; or a fitted model's coefficients and covariance | inverse-variance meta-analysis, with CI |
 | federated: FedAvg (green) | `federated: FedAvg` | model weights each round, via NVFlare FedAvg | the last-round global 2SRI model from `../federated_learning/results/2sri/<dataset>/curves.csv`, summarised into the plot's parameters by least squares on the curve over -2 <= X <= 2; no analytic CI |
-| federated: FedMR (violet) | `federated: FedMR` | centred cross-product matrices, one round (plus one for the robust SE) | exact federated 2SLS from `results/fedmr.<dataset>.csv` (`scripts/federated_exact_mr.py`), identical to the concatenated row, with CI; see `federated-exact-mr.md` |
+| federated: Fed-2SLS (violet) | `federated: Fed-2SLS` | centred cross-product matrices, one round (plus one for the robust SE) | exact federated 2SLS from `results/fed2sls.<dataset>.csv` (`scripts/federated_exact_mr.py`), identical to the concatenated row, with CI; see `federated-exact-mr.md` |
 | concatenated (black) | `concatenated` | individual rows | one 2SLS (or stratified 2SPS Cox), with CI |
 
 Grey ticks on any row are the corresponding fit without instruments: naive
@@ -137,11 +137,11 @@ it overshoots the log hazard ratio. Without a standard error it is not
 possible to say from one run how much of that is noise; a seed sweep of the
 NVFlare job would be the way to find out.
 
-The `federated: FedMR` row is the other federated route: the same
+The `federated: Fed-2SLS` row is the other federated route: the same
 individual-level 2SLS as the concatenated row, computed from per-site
 cross-product matrices and therefore identical to it, with a confidence
 interval. On every continuous set the two rows coincide to 1e-16
-(`results/fedmr.<shape>.csv`). FedMR needs a specified basis, so it does
+(`results/fed2sls.<shape>.csv`). Fed-2SLS needs a specified basis, so it does
 not replace the FedAvg curve; the two rows answer different questions.
 
 ## Curved models: two parameters

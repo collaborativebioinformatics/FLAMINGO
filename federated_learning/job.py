@@ -9,11 +9,11 @@ Methods (src/model.py):
   2sri   site-local OLS first stage X ~ SNPs, then federated outcome ~ f(X) + h(X - X_hat);
          f is the causal curve, h the control function (default)
   2sps   site-local first stage, then federated outcome ~ f(X_hat)
-  fedmr  exact federated 2SLS from summed sufficient statistics (src/fedmr_engine.py):
+  fed2sls  exact federated 2SLS from summed sufficient statistics (src/fed2sls_engine.py):
          no training, two rounds, equals the pooled fit; continuous outcomes only
 The first stage stays local because every simulated site has its own SNP
 effects and allele frequencies, so there is no shared instrument to learn
-(fedmr switches to its shared-instrument protocol when the manifest says
+(fed2sls switches to its shared-instrument protocol when the manifest says
 the SNPs are shared).
 
 One simulated client per site CSV in data/simulated_data/federated/<dataset>/.
@@ -50,7 +50,7 @@ FED_DIR = os.path.join(REPO, "data", "simulated_data", "federated")
 sys.path.insert(0, os.path.join(HERE, "src"))
 from model import MLP, MRModel  # noqa: E402
 from tasks import detect_task, load_manifest  # noqa: E402
-import fedmr_engine  # noqa: E402
+import fed2sls_engine  # noqa: E402
 import local_engine  # noqa: E402
 import plots  # noqa: E402
 
@@ -171,25 +171,25 @@ def run_dataset(dataset, method, args):
     manifest = load_manifest(data_dir)
     task = detect_task(head, manifest)
     secure = load_secure(args)
-    if method == "fedmr":
+    if method == "fed2sls":
         if secure.active:
-            raise SystemExit("fedmr sends sufficient statistics, not model updates: the fedsec components "
+            raise SystemExit("fed2sls sends sufficient statistics, not model updates: the fedsec components "
                              "(robust aggregation, dp, secagg, attacks) do not apply. Run it without --secure_config.")
         reason = None
         if task.name != "continuous":
-            reason = "FedMR is linear 2SLS on a continuous Y"
+            reason = "Fed-2SLS needs a continuous Y"
         else:
-            reason = fedmr_engine.supported(manifest, args.fedmr_basis, args.fedmr_crossfit)
+            reason = fed2sls_engine.supported(manifest, args.fed2sls_basis, args.fed2sls_crossfit)
         if reason:
-            print(f"\n##### {dataset} / fedmr: skipped, {reason} #####\n", flush=True)
+            print(f"\n##### {dataset} / fed2sls: skipped, {reason} #####\n", flush=True)
             return
-        print(f"\n##### {dataset} / fedmr ({args.engine}): task={task.name}, {len(sites)} sites, "
-              f"basis={args.fedmr_basis}, crossfit={args.fedmr_crossfit} #####\n", flush=True)
+        print(f"\n##### {dataset} / fed2sls ({args.engine}): task={task.name}, {len(sites)} sites, "
+              f"basis={args.fed2sls_basis}, crossfit={args.fed2sls_crossfit} #####\n", flush=True)
         workspace = os.path.join(args.workspace, method, dataset)
         shutil.rmtree(workspace, ignore_errors=True)
         root = results_root(secure, args.results_root)
-        fedmr_engine.run(dataset, data_dir, os.path.join(root, method, dataset), workspace, args.engine,
-                         args.fedmr_basis, args.fedmr_crossfit, args.seed, simulator_run, args.task_interval)
+        fed2sls_engine.run(dataset, data_dir, os.path.join(root, method, dataset), workspace, args.engine,
+                         args.fed2sls_basis, args.fed2sls_crossfit, args.seed, simulator_run, args.task_interval)
         plots.plot_dataset(dataset, method, root, data_dir, task)
         return
     print(f"\n##### {dataset} / {method} ({args.engine}): task={task.name}, {len(sites)} sites, "
@@ -271,7 +271,7 @@ def run_parallel(pairs, args):
     passthrough = [f"--rounds={args.rounds}", f"--epochs={args.epochs}", f"--lr={args.lr}",
                    f"--batch_size={args.batch_size}", f"--workspace={args.workspace}", f"--engine={args.engine}",
                    f"--task_interval={args.task_interval}", f"--fed_dir={args.fed_dir}",
-                   f"--fedmr_basis={args.fedmr_basis}", f"--fedmr_crossfit={args.fedmr_crossfit}"]
+                   f"--fed2sls_basis={args.fed2sls_basis}", f"--fed2sls_crossfit={args.fed2sls_crossfit}"]
     if args.results_root:
         passthrough.append(f"--results_root={args.results_root}")
     if args.threads:
@@ -305,7 +305,7 @@ def run_parallel(pairs, args):
                     failed.append((dataset, method))
                     print(f"\n##### {dataset} / {method}: FAILED (exit {rc}), see {log}\n" + text[-2000:], flush=True)
                     continue
-                start = max(text.find("=== Round"), text.find("FedMR fit"))
+                start = max(text.find("=== Round"), text.find("Fed-2SLS fit"))
                 print(f"\n##### {dataset} / {method}: done #####\n" + (text[start:] if start >= 0 else ""), flush=True)
     if failed:
         raise SystemExit(f"{len(failed)} job(s) failed: {failed}")
@@ -315,12 +315,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", action="append", help="subfolder of data/simulated_data/federated/ (repeatable)")
     p.add_argument("--all", action="store_true", help="run every dataset under federated/")
-    p.add_argument("--method", action="append", choices=["naive", "2sri", "2sps", "fedmr"],
+    p.add_argument("--method", action="append", choices=["naive", "2sri", "2sps", "fed2sls"],
                    help="repeatable; default 2sri")
-    p.add_argument("--fedmr_basis", choices=["linear", "quadratic"], default="linear",
-                   help="fedmr: structural basis, [X] or [X, X^2] (default linear)")
-    p.add_argument("--fedmr_crossfit", type=int, default=0,
-                   help="fedmr: k-fold cross-fitted instrument, site-local first stages only (default 0 = off)")
+    p.add_argument("--fed2sls_basis", choices=["linear", "quadratic"], default="linear",
+                   help="fed2sls: structural basis, [X] or [X, X^2] (default linear)")
+    p.add_argument("--fed2sls_crossfit", type=int, default=0,
+                   help="fed2sls: k-fold cross-fitted instrument, site-local first stages only (default 0 = off)")
     p.add_argument("--rounds", type=int, default=5)
     p.add_argument("--epochs", type=int, default=2)
     p.add_argument("--lr", type=float, default=1e-2)

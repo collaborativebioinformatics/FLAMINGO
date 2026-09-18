@@ -1,24 +1,24 @@
-# FedMR: exact federated MR from sufficient statistics
+# Fed-2SLS: exact federated MR from sufficient statistics
 
 The summary-statistics route (`federated-summary-mr.md`) recovers the
 average slope but not the curve; the NVFlare FedAvg route
 (`../../federated_learning/`) recovers a flexible curve but has no analytic
-standard error and is an approximation. FedMR is a third federated route:
+standard error and is an approximation. Fed-2SLS is a third federated route:
 each site releases a few cross-product matrices, the coordinator sums them
 and solves, and the result *is* the pooled two-stage least squares (2SLS)
 fit, to machine precision, with its standard errors. Nothing is trained.
 
 Code: the `flamingo_fedmr` package in `../../fedmr/` (numpy only), the
 driver `scripts/federated_exact_mr.py`, the NVFlare transport
-(`--method fedmr` of `../../federated_learning/job.py`), the seed sweep
-`scripts/fedmr_sweep.py`, and the tests `tests/test_fedmr.py`. Run from
+(`--method fed2sls` of `../../federated_learning/job.py`), the seed sweep
+`scripts/fed2sls_sweep.py`, and the tests `tests/test_fed2sls.py`. Run from
 `data/`:
 
 ```bash
 uv run python scripts/federated_exact_mr.py --all          # every continuous set
 uv run pytest -q                                           # identity tests
-uv run python scripts/fedmr_sweep.py --seeds 100           # ~15 min
-cd ../federated_learning && uv run python job.py --all --method fedmr   # the real federation
+uv run python scripts/fed2sls_sweep.py --seeds 100           # ~15 min
+cd ../federated_learning && uv run python job.py --all --method fed2sls   # the real federation
 ```
 
 ## The estimator
@@ -97,7 +97,7 @@ a hypothesis; the sweep below tests it.
 
 ## Identity checks
 
-`tests/test_fedmr.py` (35 tests) compares both protocols against
+`tests/test_fed2sls.py` (35 tests) compares both protocols against
 independent stacked-data projections written out in the test, not against
 the package's own matrix helpers: the full coefficient vector, classical
 and HC0 covariance, residual variance, nested-regression first-stage F,
@@ -108,7 +108,7 @@ cross-fit estimating equation. Tolerance 1e-10; observed differences are at
 
 `scripts/federated_exact_mr.py --all` on the checked-in sets:
 
-| set | protocol | FedMR θ1 (SE, robust SE) | concatenated θ1 (SE) | max diff |
+| set | protocol | Fed-2SLS θ1 (SE, robust SE) | concatenated θ1 (SE) | max diff |
 |---|---|---|---|---|
 | linear | local first stage | 0.3170 (0.0145, 0.0145) | 0.3170 (0.0145) | 3e-16 |
 | quadratic | local first stage | 0.3182 (0.0148, 0.0149) | 0.3182 (0.0148) | 2e-16 |
@@ -123,15 +123,15 @@ to 1e-15.
 
 ## The real federation
 
-`job.py --method fedmr` in `../../federated_learning/` runs the protocol in
-the NVFlare simulator: one client per site (`src/fedmr_client.py`), a
-server workflow that sums and solves (`src/fedmr_controller.py`, a
+`job.py --method fed2sls` in `../../federated_learning/` runs the protocol in
+the NVFlare simulator: one client per site (`src/fed2sls_client.py`), a
+server workflow that sums and solves (`src/fed2sls_controller.py`, a
 `ModelController` that never averages), two rounds. After the job it
 re-runs the package in-process on the same files and the pooled reference
 in numpy, and fails if they disagree by more than 1e-10. On every
 continuous set the three agree to 1e-16 in the estimate and the robust SE
-(`../../federated_learning/results/fedmr/<dataset>/metrics.csv`). The
-quadratic basis runs the same way (`--fedmr_basis quadratic`), and the
+(`../../federated_learning/results/fed2sls/<dataset>/metrics.csv`). The
+quadratic basis runs the same way (`--fed2sls_basis quadratic`), and the
 result is drawn with its analytic band on the same fitted-curve plots as
 the FedAvg methods.
 
@@ -184,20 +184,20 @@ cross-fitting or LIML-type methods, not a larger `A`.
 
 ## Seed sweep
 
-`scripts/fedmr_sweep.py` moves one design axis at a time away from the
+`scripts/fed2sls_sweep.py` moves one design axis at a time away from the
 default (10 sites of 500 to 5,000 people, 20 SNPs, `h2_x` 0.10, linear
 θ = 0.3) and reports bias, RMSE, mean SE and 95% coverage over 100 seeds
-for pooled 2SLS (= FedMR), cross-fitted FedMR, the meta-analysis of site
+for pooled 2SLS (= Fed-2SLS), cross-fitted Fed-2SLS, the meta-analysis of site
 2SLS fits and per-SNP summary-statistics IVW. The estimand is the
 n-weighted mean of the site causal effects, which is what a site-intercept
-2SLS targets when effects differ. Results: `results/fedmr_sweep_summary.csv`
-and `results/fedmr_sweep.png`; the sweep section below is filled from them.
+2SLS targets when effects differ. Results: `results/fed2sls_sweep_summary.csv`
+and `results/fed2sls_sweep.png`; the sweep section below is filled from them.
 
 100 seeds per level, 10 sites of 500 to 5,000 people unless the axis says
 otherwise. Bias and coverage are against the pooled-2SLS limit `theta*`.
-The largest `|FedMR - pooled|` over all 2,200 replicates was 1.7e-15.
+The largest `|Fed-2SLS - pooled|` over all 2,200 replicates was 1.7e-15.
 
-| axis | level | mean F | pooled = FedMR: bias (coverage) | FedMR-CF | site meta | sumstats |
+| axis | level | mean F | pooled = Fed-2SLS: bias (coverage) | Fed-2SLS-CF | site meta | sumstats |
 |---|---|---|---|---|---|---|
 | sites | 2 | 17 | 0.011 (0.93) | 0.004 (0.94) | 0.012 (0.93) | 0.011 (0.95) |
 | sites | 20 | 16 | 0.007 (0.92) | 0.000 (0.94) | 0.007 (0.92) | 0.006 (0.93) |
@@ -213,18 +213,18 @@ The largest `|FedMR - pooled|` over all 2,200 replicates was 1.7e-15.
 | pleiotropy | balanced sd 0.02 | 17 | 0.006 (0.84) | -0.001 (0.86) | 0.006 (0.86) | 0.006 (0.87) |
 | pleiotropy | directional mean 0.02 | 17 | 0.006 (0.78) | -0.001 (0.81) | 0.007 (0.77) | 0.006 (0.81) |
 
-Full table: `results/fedmr_sweep_summary.csv`; figure: `results/fedmr_sweep.png`.
+Full table: `results/fed2sls_sweep_summary.csv`; figure: `results/fed2sls_sweep.png`.
 
 What it says:
 
 - **Number of sites and imbalance do not matter** for any route. With one
   linear effect and site intercepts, pooled 2SLS, the meta-analysis of site
   2SLS fits and per-SNP IVW are the same estimator up to weights, and
-  FedMR is the pooled one exactly.
+  Fed-2SLS is the pooled one exactly.
 - **Weak instruments are where the routes separate, and only cross-fitting
   helps.** At F near 4 (either `h2_x` = 0.02 or 100 SNPs) every one-sample
   route leans about 0.025 towards the confounded OLS value and coverage
-  falls to 0.72 to 0.87. Cross-fitted FedMR removes the lean (bias within
+  falls to 0.72 to 0.87. Cross-fitted Fed-2SLS removes the lean (bias within
   0.001) and restores 0.93 to 0.95 coverage, at the price of a wider SE
   (0.060 against 0.039 at `h2_x` = 0.02, but 0.024 against 0.017 with 100
   SNPs, where it also has the lower RMSE). The hypothesis that out-of-fold
@@ -232,11 +232,11 @@ What it says:
 - **Shared SNPs favour the pooled first stage.** With the same 20 variants
   everywhere, the global first stage has F about 150 while each site's own
   first stage has F about 15, so the site-level routes (site meta, sumstats)
-  keep a lean of 0.010 that the pooled and shared-instrument FedMR fits do
+  keep a lean of 0.010 that the pooled and shared-instrument Fed-2SLS fits do
   not (0.004). MAF shifts of up to 1.0 on the logit scale do not change
   this.
 - **Effect heterogeneity is a question of estimand, not of federation.**
-  Pooled 2SLS, FedMR and site meta-analysis all sit on the first-stage-
+  Pooled 2SLS, Fed-2SLS and site meta-analysis all sit on the first-stage-
   weighted mean; per-SNP IVW, whose weights are the SNP-level precisions,
   drifts to -0.014 with coverage 0.88 at `theta` sd 0.2.
 - **Pleiotropy hurts every route equally.** Direct SNP-to-outcome effects

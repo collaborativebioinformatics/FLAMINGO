@@ -270,9 +270,9 @@ def headline_metrics(summary: dict) -> None:
         est, se = summary["pooled"]
         cards.append(stat_card("Pooled (individual-level)", f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "benchmark"))
-    if "fedmr" in summary:
-        est, se = summary["fedmr"][:2]
-        cards.append(stat_card("Federated FedMR (exact 2SLS)", f"{est:.3f}",
+    if "fed2sls" in summary:
+        est, se = summary["fed2sls"][:2]
+        cards.append(stat_card("Federated Fed-2SLS", f"{est:.3f}",
                                f"95% CI ± {1.96 * se:.3f}", "pink"))
     if "pooled_naive" in summary:
         cards.append(stat_card("Pooled naive (no IV)", f"{summary['pooled_naive'][0]:.3f}",
@@ -324,9 +324,9 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
     elif "pooled" in summary:
         est, se = summary["pooled"]
         rows.append(row("Concatenated 2SLS", "pooled individual rows", est, None, se))
-    if "fedmr" in summary:
-        v = summary["fedmr"]
-        rows.append(row("Federated FedMR (exact 2SLS)", "summed sufficient statistics", v[0],
+    if "fed2sls" in summary:
+        v = summary["fed2sls"]
+        rows.append(row("Federated Fed-2SLS (exact pooled 2SLS)", "summed sufficient statistics", v[0],
                         v[2] if len(v) > 2 else None, v[1]))
     for method, coef in sorted(federated.items()):
         rows.append(row(f"Federated FedAvg · {method}", "model updates only",
@@ -427,7 +427,7 @@ with tab_experiments:
             help="naive: outcome on X directly, the confounded association. "
                  "2sri: site-local first stage, then a federated control function. "
                  "2sps: site-local first stage, then federated on the predicted X. "
-                 "fedmr: exact 2SLS from summed sufficient statistics, no training "
+                 "fed2sls: exact 2SLS from summed sufficient statistics, no training "
                  "(continuous outcomes; skipped for cox).",
         )
         run_params["fl_engine"] = c2.selectbox(

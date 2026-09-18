@@ -1,12 +1,12 @@
-"""FedMR on the federated sets: exact federated 2SLS versus the other three families.
+"""Fed-2SLS on the federated sets: exact federated 2SLS versus the other three families.
 
 For each continuous set this runs, without ever concatenating rows across sites,
 
-    FedMR             sufficient statistics summed over sites (the flamingo_fedmr package),
+    Fed-2SLS             sufficient statistics summed over sites (the flamingo_fedmr package),
                       classical and robust standard errors, first-stage F and partial R^2.
                       The protocol follows the manifest: LocalFirstStage for site-specific
                       SNPs (this repo's default sets), SharedInstrument when shared_snps.
-    FedMR-CF          the same with k-fold cross-fitted X_hat as the generated instrument
+    Fed-2SLS-CF          the same with k-fold cross-fitted X_hat as the generated instrument
 
 and compares them with
 
@@ -14,10 +14,10 @@ and compares them with
     site meta         each site's own 2SLS, combined by inverse-variance meta-analysis
     sumstats IVW      per-SNP GWAS effects, per-site IVW, meta-analysis
 
-The headline number is |FedMR - concatenated|, which must be below 1e-10: the
+The headline number is |Fed-2SLS - concatenated|, which must be below 1e-10: the
 federated estimator is the pooled estimator, not an approximation of it.
 
-Writes results/fedmr.<shape>.csv (one row per estimator) that the forest and
+Writes results/fed2sls.<shape>.csv (one row per estimator) that the forest and
 dose-response plots pick up, and prints the table.
 
     uv run python scripts/federated_exact_mr.py --shape quadratic
@@ -76,7 +76,7 @@ def site_meta_linear(sites: list[fm.SiteData]) -> tuple[float, float]:
 
 @dataclass(kw_only=True)
 class EstimatorRow:
-    """One line of the comparison table (results/fedmr.<shape>.csv)."""
+    """One line of the comparison table (results/fed2sls.<shape>.csv)."""
     estimator: str
     theta1: float
     se1: float | None = None
@@ -92,14 +92,14 @@ class EstimatorRow:
     what_leaves_site: str = ""
 
 
-def fedmr_row(
+def fed2sls_row(
     name: str,
     run: fm.Run,
     diff: float | None = None,
     leaves: str = "",
     theta2: bool = False,
 ) -> EstimatorRow:
-    """Row for a FedMR run: estimates, both SEs and first-stage diagnostics from the result."""
+    """Row for a Fed-2SLS run: estimates, both SEs and first-stage diagnostics from the result."""
     r = run.result
     fs = r.diagnostics.first_stage["X"]
     return EstimatorRow(estimator=name, theta1=r["X"], se1=r.se("X"), robust_se1=r.se("X", True),
@@ -135,9 +135,9 @@ def analyse(shape: str, crossfit: int, out_dir: Path) -> pl.DataFrame:
 
     run = protocol_class(basis="linear", robust=True).run(sites)
     res = run.result
-    rows.append(fedmr_row(f"FedMR ({protocol_name})", run, diff=abs(res["X"] - pooled),
+    rows.append(fed2sls_row(f"Fed-2SLS ({protocol_name})", run, diff=abs(res["X"] - pooled),
                           leaves="centred Z'Z, Z'W, Z'Y, W'W, W'Y, Y'Y, n (+ first-stage RSS); then H for the robust SE"))
-    rows.append(fedmr_row(f"FedMR-CF ({crossfit} folds)",
+    rows.append(fed2sls_row(f"Fed-2SLS-CF ({crossfit} folds)",
                           protocol_class(basis="linear", robust=True, crossfit=crossfit).run(sites),
                           leaves="per-fold first-stage moments, then the same statistics"))
 
@@ -158,9 +158,9 @@ def analyse(shape: str, crossfit: int, out_dir: Path) -> pl.DataFrame:
         qrun = protocol_class(basis="quadratic", robust=True).run(sites)
         q = qrun.result
         d = max(abs(q["X"] - theta[0]), abs(q["X2"] - theta[1]))
-        rows.append(fedmr_row("FedMR quadratic", qrun, diff=d, theta2=True,
+        rows.append(fed2sls_row("Fed-2SLS quadratic", qrun, diff=d, theta2=True,
                               leaves="the same statistics with W = [X, X^2], Z = [xhat, xhat^2], centred within site"))
-        rows.append(fedmr_row(f"FedMR-CF quadratic ({crossfit} folds)",
+        rows.append(fed2sls_row(f"Fed-2SLS-CF quadratic ({crossfit} folds)",
                               protocol_class(basis="quadratic", robust=True, crossfit=crossfit).run(sites),
                               theta2=True))
         thetas, covs = zip(*[quadratic_2sls([r]) for r in raw(sites)])
@@ -177,15 +177,15 @@ def analyse(shape: str, crossfit: int, out_dir: Path) -> pl.DataFrame:
              "avg_slope": float(weighted_slope / total_n)}
     df = pl.DataFrame([asdict(r) for r in rows])
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"fedmr.{shape}.csv"
+    out = out_dir / f"fed2sls.{shape}.csv"
     df.write_csv(out)
-    (out_dir / f"fedmr.{shape}.truth.json").write_text(json.dumps(truth, indent=1))
+    (out_dir / f"fed2sls.{shape}.truth.json").write_text(json.dumps(truth, indent=1))
 
     print(f"\n{shape}: {len(sites)} sites, N = {res.N:,}, protocol = {protocol_name}; "
           f"true theta1 = {truth['theta1']}, theta2 = {truth['theta2']}, average slope = {truth['avg_slope']:.3f}")
     with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4, tbl_width_chars=200, fmt_str_lengths=40):
         print(df.drop("what_leaves_site"))
-    print(f"identity check |FedMR - concatenated| = {abs(res['X'] - pooled):.2e}"
+    print(f"identity check |Fed-2SLS - concatenated| = {abs(res['X'] - pooled):.2e}"
           + (f", quadratic {d:.2e}" if curved and not shared else ""))
     print(f"wrote {out}")
     return df
@@ -196,7 +196,7 @@ def main() -> None:
     p.add_argument("--shape", action="append", choices=SHAPES + ("linear_shared",),
                    help="repeatable; default quadratic")
     p.add_argument("--all", action="store_true", help="every continuous set under simulated_data/federated/")
-    p.add_argument("--crossfit", type=int, default=5, help="folds for FedMR-CF")
+    p.add_argument("--crossfit", type=int, default=5, help="folds for Fed-2SLS-CF")
     p.add_argument("--out", type=Path, default=Path("results"))
     a = p.parse_args()
     if a.all:

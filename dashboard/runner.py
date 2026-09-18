@@ -41,7 +41,7 @@ DATA_PYTHON = os.environ.get("FLAMINGO_DATA_PYTHON", sys.executable)
 # The repository is one environment, so every step runs in this interpreter.
 # Both overrides remain for pointing a step at a separate environment.
 FL_PYTHON = os.environ.get("FLAMINGO_FL_PYTHON", sys.executable)
-FL_METHODS = ("naive", "2sri", "2sps", "fedmr")
+FL_METHODS = ("naive", "2sri", "2sps", "fed2sls")
 
 SHAPES = ("linear", "quadratic", "threshold", "cox")
 CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recover
@@ -50,7 +50,7 @@ CURVED_SHAPES = ("quadratic", "threshold")  # the shapes with a theta2 to recove
 # so they deliberately stay out of the run id.
 EXPERIMENT_DEFAULTS: dict = {
     "run_federated": True,
-    "fl_methods": ["naive", "2sri", "fedmr"],
+    "fl_methods": ["naive", "2sri", "fed2sls"],
     "fl_engine": "local",
     "fl_rounds": 5,
     "fl_epochs": 2,
@@ -205,7 +205,7 @@ METHOD_LABELS = {
     "naive": "Federated · naive (no instruments)",
     "2sri": "Federated · 2SRI (control function)",
     "2sps": "Federated · 2SPS (predicted exposure)",
-    "fedmr": "Federated · FedMR (exact 2SLS from summed statistics)",
+    "fed2sls": "Federated · Fed-2SLS (exact 2SLS from summed statistics)",
 }
 
 
@@ -242,7 +242,7 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (NVFlare FedAvg and FedMR)",
+        label="Federated learning (NVFlare FedAvg and Fed-2SLS)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
@@ -425,8 +425,8 @@ _PATTERNS = {
     "meta_ivw": rf"meta IVW\s+{_NUM}\s+se\s+{_NUM}",
     "pooled": rf"pooled (?:2SLS|2SPS Cox)\s+{_NUM}\s+se\s+{_NUM}",
     "pooled_naive": rf"pooled naive\s+{_NUM}",
-    # `federated FedMR: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
-    "fedmr": rf"federated FedMR:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
+    # `federated Fed-2SLS: theta1  se1 [ theta2  se2]   (exact, with CI)`; the pair is absent for the linear basis
+    "fed2sls": rf"federated Fed-2SLS:\s+{_NUM}\s+{_NUM}(?:\s+{_NUM}\s+{_NUM})?\s+\(exact",
     "heterogeneity_q": rf"heterogeneity Q\s+{_NUM}",
     "model_sumstats": rf"model sumstats[^:]*:\s*theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",
     "pooled_quadratic": rf"concatenated quadratic 2SLS:\s+theta1\s+{_NUM}\s+\({_NUM}\)\s+theta2\s+{_NUM}\s+\({_NUM}\)",

@@ -1,6 +1,6 @@
 # Methods
 
-## Exact federated Mendelian randomization from sufficient statistics (FedMR)
+## Exact federated Mendelian randomization from sufficient statistics (Fed-2SLS)
 
 Let site $k$ hold $n_k$ individuals with genotypes $G_k$ ($n_k \times m$
 allele dosages), exposure $X_k$, outcome $Y_k$ and covariates $C_k$. Write
@@ -47,7 +47,7 @@ one for the second stage. A cross-fitted variant uses the out-of-fold
 $\hat X$ as the instrument, solving
 $\sum_i \hat X_i^{(-\mathrm{fold}(i))}(Y_i - \theta X_i) = 0$.
 
-FedMR is distributed statistical estimation: the coordinator sees each
+Fed-2SLS is distributed statistical estimation: the coordinator sees each
 site's released matrices, which for the local-first-stage protocol are
 seven scalars per site and for the shared protocol the site's within-site
 LD matrix and GWAS-level sums. No privacy guarantee is claimed.

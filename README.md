@@ -29,7 +29,7 @@ uv run python scripts/federated_summary_mr.py --shape quadratic
 # 4. Non-linear MR: pooled quadratic 2SLS vs the summary-statistics line
 uv run python scripts/federated_nonlinear_mr.py --shape quadratic
 
-# 5. FedMR: exact federated 2SLS from summed sufficient statistics (equals the pooled fit)
+# 5. Fed-2SLS: exact federated 2SLS from summed sufficient statistics (equals the pooled fit)
 uv run python scripts/federated_exact_mr.py --all
 uv run pytest -q                                   # identity tests against the pooled fits
 
@@ -37,12 +37,12 @@ uv run pytest -q                                   # identity tests against the 
 cd ../federated_learning
 uv run python job.py --dataset quadratic
 
-# 7. FedMR through NVFlare: two rounds, no training, checked against the pooled fit
-uv run python job.py --all --method fedmr
+# 7. Fed-2SLS through NVFlare: two rounds, no training, checked against the pooled fit
+uv run python job.py --all --method fed2sls
 ```
 
 Results are written to `data/results/` and `federated_learning/results/<dataset>/`.
-FedMR is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
+Fed-2SLS is described in [data/docs/federated-exact-mr.md](data/docs/federated-exact-mr.md).
 
 # Interactive dashboard
 
@@ -69,5 +69,5 @@ Mendelian randomization (MR) uses genetic variants as natural experiments to est
 # Further Reading
 
 - [In-depth reasoning](indepth_reasoning.md): more detail on the methods and the reasoning behind them.
-- [FedMR](data/docs/federated-exact-mr.md): exact federated one-sample MR from sufficient statistics, the protocols, the identity checks and the seed sweep; plan and review history in [data/docs/fedmr-plan.md](data/docs/fedmr-plan.md).
+- [Fed-2SLS](data/docs/federated-exact-mr.md): exact federated one-sample MR from sufficient statistics, the protocols, the identity checks and the seed sweep; plan and review history in [data/docs/fed2sls-plan.md](data/docs/fed2sls-plan.md).
 - [Robust and privacy-preserving federation](federated_learning/ROBUST_PRIVATE.md): malicious sites, what the server learns from the updates, differential privacy and secure aggregation for the federated MR second stage.

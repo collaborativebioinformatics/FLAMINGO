@@ -1,4 +1,4 @@
-"""Server-side FedMR workflow for NVFlare: sum the sites' statistics, solve, optionally
+"""Server-side Fed-2SLS workflow for NVFlare: sum the sites' statistics, solve, optionally
 collect the robust-covariance round. No training, no averaging.
 
 Round 0 ("stats")   broadcast the protocol spec; each site returns SiteStats
@@ -19,7 +19,7 @@ from nvflare.app_common.workflows.model_controller import ModelController
 import flamingo_fedmr as fm
 
 
-class FedMRController(ModelController):
+class Fed2SLSController(ModelController):
     def __init__(self, protocol: str = "local", basis: str = "linear", crossfit: int = 0,
                  robust: bool = True, out_path: str = "", seed: int = 0, **kwargs: object) -> None:
         super().__init__(**kwargs)
@@ -28,24 +28,24 @@ class FedMRController(ModelController):
 
     def run(self) -> None:
         spec = {"protocol": self.protocol, "basis": self.basis, "crossfit": self.crossfit, "seed": self.seed}
-        self.info(f"FedMR round 0: collecting sufficient statistics ({spec})")
+        self.info(f"Fed-2SLS round 0: collecting sufficient statistics ({spec})")
         replies = self.send_model_and_wait(
             task_name="train", data=FLModel(params={}, params_type=ParamsType.FULL, current_round=0, total_rounds=2,
                                              meta={"task": "stats", **spec}))
-        parts = [fm.SiteStats.from_transport(r.params, r.meta["fedmr"]) for r in replies]
+        parts = [fm.SiteStats.from_transport(r.params, r.meta["fed2sls"]) for r in replies]
         stats = fm.aggregate(parts)
         res = fm.fit(stats)
         rounds = 1
         estimates = ", ".join(f"{name} = {res[name]:.6f} ({res.se(name):.6f})" for name in res.w_names)
-        self.info(f"FedMR fit over {len(parts)} sites, N = {stats.N}: {estimates}")
+        self.info(f"Fed-2SLS fit over {len(parts)} sites, N = {stats.N}: {estimates}")
 
         if self.robust:
-            self.info("FedMR round 1: robust covariance")
+            self.info("Fed-2SLS round 1: robust covariance")
             replies = self.send_model_and_wait(
                 task_name="train", data=FLModel(params={}, params_type=ParamsType.FULL, current_round=1,
                                                  total_rounds=2, meta={"task": "robust", "theta": res.theta_by_name(),
                                                                        **spec}))
-            H = fm.aggregate_robust([(r.meta["fedmr"]["z_names"], np.asarray(r.params["H"], float)) for r in replies],
+            H = fm.aggregate_robust([(r.meta["fed2sls"]["z_names"], np.asarray(r.params["H"], float)) for r in replies],
                                     stats.layout)
             res.robust_cov = fm.robust_cov(stats, H)
             rounds += 1

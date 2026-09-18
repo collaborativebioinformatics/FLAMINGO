@@ -1,13 +1,13 @@
-"""Seed sweep: FedMR against the pooled, site-meta and summary-statistic estimators
+"""Seed sweep: Fed-2SLS against the pooled, site-meta and summary-statistic estimators
 as one design axis at a time moves away from the default ten-site setting.
 
 Linear causal effect throughout (theta1 = 0.3 unless heterogeneous). Sites are
 simulated in memory with the same generators as the checked-in sets, then:
 
     pooled        concatenated 2SLS (per-site first stages, or one shared first stage
-                  when SNPs are shared); FedMR equals it, and the sweep records the
-                  largest |FedMR - pooled| seen as the identity check
-    fedmr_cf      cross-fitted FedMR, k = 5 (hypothesis: smaller one-sample lean)
+                  when SNPs are shared); Fed-2SLS equals it, and the sweep records the
+                  largest |Fed-2SLS - pooled| seen as the identity check
+    fed2sls_cf      cross-fitted Fed-2SLS, k = 5 (hypothesis: smaller one-sample lean)
     site_meta     each site's own 2SLS, inverse-variance meta-analysis
     sumstats      per-SNP GWAS effects, per-site IVW, meta-analysis
 
@@ -25,11 +25,11 @@ so target a slightly different mean under heterogeneity; their bias is still
 reported against theta*. Reported per estimator and level: bias, RMSE, mean
 SE, coverage of the 95% interval; also the SNP-set first-stage F.
 
-    uv run python scripts/fedmr_sweep.py --seeds 100          # ~10 min
-    uv run python scripts/fedmr_sweep.py --axis sites --seeds 20
+    uv run python scripts/fed2sls_sweep.py --seeds 100          # ~10 min
+    uv run python scripts/fed2sls_sweep.py --axis sites --seeds 20
 
-Writes results/fedmr_sweep.csv (one row per seed x level x estimator),
-results/fedmr_sweep_summary.csv and results/fedmr_sweep.png.
+Writes results/fed2sls_sweep.csv (one row per seed x level x estimator),
+results/fed2sls_sweep_summary.csv and results/fed2sls_sweep.png.
 """
 
 import argparse
@@ -55,8 +55,8 @@ from simulate_basic import simulate  # noqa: E402
 from simulate_federated_sites import sample_site_params  # noqa: E402
 
 INK, MUTED, GRID = "#1f1f1e", "#6b6a63", "#e6e5df"
-COLORS = {"pooled": "#1f1f1e", "fedmr_cf": "#8a2be2", "site_meta": "#2a78d6", "sumstats": "#eb6834"}
-LABELS = {"pooled": "pooled 2SLS = FedMR", "fedmr_cf": "FedMR cross-fitted (5 folds)",
+COLORS = {"pooled": "#1f1f1e", "fed2sls_cf": "#8a2be2", "site_meta": "#2a78d6", "sumstats": "#eb6834"}
+LABELS = {"pooled": "pooled 2SLS = Fed-2SLS", "fed2sls_cf": "Fed-2SLS cross-fitted (5 folds)",
           "site_meta": "site 2SLS meta-analysis", "sumstats": "per-SNP sumstats IVW"}
 
 BASE = dict(n_sites=10, n_snps=20, pop_min=500, pop_max=5000, sizes="spread", h2x_mean=0.10, h2x_kappa=40.0,
@@ -125,13 +125,13 @@ def pooled_estimand(run, thetas: list) -> float:
 
 
 def estimate_all(sites: list, thetas: list, shared: bool) -> tuple[dict, float, float, float]:
-    """Estimates and SEs per route, the identity gap |FedMR - pooled|, the estimand, and the SNP-set F."""
+    """Estimates and SEs per route, the identity gap |Fed-2SLS - pooled|, the estimand, and the SNP-set F."""
     raw = [(s.G, s.X, s.Y) for s in sites]
     protocol_class = fm.SharedInstrumentFedMR if shared else fm.LocalFirstStageFedMR
     pooled, pooled_se, _ = pooled_2sls_shared(sites) if shared else pooled_2sls(raw)
     run = protocol_class(robust=False).run(sites)
     cf = protocol_class(robust=False, crossfit=5).run(sites).result
-    out = {"pooled": (pooled, pooled_se), "fedmr_cf": (cf["X"], cf.se("X"))}
+    out = {"pooled": (pooled, pooled_se), "fed2sls_cf": (cf["X"], cf.se("X"))}
     est, se = zip(*[pooled_2sls([r])[:2] for r in raw])
     w = 1 / np.array(se) ** 2
     out["site_meta"] = (float(np.sum(w * est) / w.sum()), float(np.sqrt(1 / w.sum())))
@@ -194,7 +194,7 @@ def plot(summary: pl.DataFrame, out: Path) -> None:
     axs[1, 0].set_ylabel("95% coverage")
     handles, labels = axs[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, loc="lower center", ncol=4, fontsize=9)
-    fig.suptitle("FedMR seed sweep: estimand = first-stage-weighted mean site effect (the pooled 2SLS limit)",
+    fig.suptitle("Fed-2SLS seed sweep: estimand = first-stage-weighted mean site effect (the pooled 2SLS limit)",
                  x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout(rect=(0, 0.06, 1, 0.97))
     fig.savefig(out)
@@ -204,7 +204,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--seeds", type=int, default=100)
     p.add_argument("--axis", action="append", choices=list(AXES), help="repeatable; default all")
-    p.add_argument("--out", type=Path, default=Path("results/fedmr_sweep"))
+    p.add_argument("--out", type=Path, default=Path("results/fed2sls_sweep"))
     a = p.parse_args()
     rows = []
     for axis in a.axis or list(AXES):
@@ -217,7 +217,7 @@ def main() -> None:
     plot(summary, a.out.with_suffix(".png"))
     with pl.Config(tbl_rows=-1, tbl_cols=-1, float_precision=4, tbl_width_chars=160):
         print(summary)
-    print(f"largest |FedMR - pooled| over the whole sweep: {df['identity_diff'].max():.2e}")
+    print(f"largest |Fed-2SLS - pooled| over the whole sweep: {df['identity_diff'].max():.2e}")
     print(f"wrote {a.out}.csv, {a.out}_summary.csv, {a.out}.png")
 
 
