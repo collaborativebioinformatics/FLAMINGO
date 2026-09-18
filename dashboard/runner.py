@@ -362,6 +362,7 @@ def execute(step: Step, params: dict, paths: RunPaths, force: bool = False) -> S
     if not force and is_complete(step, params, paths) and log.exists():
         return StepResult(step.key, True, 0, "", log.read_text(), 0.0, cached=True)
 
+    params = full(params)          # every callback sees the derived keys (fl_methods, run_federated)
     argv = [step.python, str(step.script)] + [str(a) for a in step.argv(params, paths)]
     command = " ".join(argv)
     start = time.perf_counter()

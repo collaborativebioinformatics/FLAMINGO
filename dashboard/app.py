@@ -251,6 +251,7 @@ def output_block(step, label, path, paths, level: str = "####") -> None:
 
 def show_outputs(step, params, paths, skip: set | None = None) -> None:
     """Every asset a step produced, each under its own heading."""
+    params = runner.full(params)
     for label, path in step.outputs(params, paths).items():
         if not path.exists() or (skip and (step.key, label) in skip):
             continue
