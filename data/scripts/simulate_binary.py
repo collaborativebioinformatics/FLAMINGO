@@ -26,11 +26,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from simulate_basic import _draw_exposure, _frame, _pleiotropy, causal_curve  # noqa: E402
 
 
-def _expit(z):
+def _expit(z) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-z))
 
 
-def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, max_iter=100):
+def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, max_iter=100) -> float:
     """Bisect for alpha such that mean(expit(alpha + z)) ~= prevalence."""
     for _ in range(max_iter):
         mid = (lo + hi) / 2
@@ -44,7 +44,7 @@ def _find_intercept_for_prevalence(z, prevalence, lo=-20.0, hi=20.0, tol=1e-6, m
     return mid
 
 
-def binarize_liability(liability, prevalence, link, rng):
+def binarize_liability(liability, prevalence, link, rng) -> tuple:
     """Turn a continuous liability into a 0/1 outcome at the target prevalence.
 
     'liability': deterministic threshold at the empirical quantile of the
@@ -70,7 +70,7 @@ def binarize_liability(liability, prevalence, link, rng):
 
 
 def simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed,
-                     link="logistic", prevalence=0.3, maf=None, beta=None, alpha=None):
+                     link="logistic", prevalence=0.3, maf=None, beta=None, alpha=None) -> tuple:
     """Binary-outcome model: Y = binarize(f(X) + gamma_y U + e_y).
 
     shape: 'linear' (f(x) = theta1 x), 'quadratic', or 'threshold' (see
@@ -100,7 +100,7 @@ def simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, se
     return _frame(n, G, U, X, Y), truth
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n", type=int, default=10_000)
     p.add_argument("--n-snps", type=int, default=20)

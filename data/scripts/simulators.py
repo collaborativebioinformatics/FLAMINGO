@@ -17,6 +17,7 @@ type later means adding one branch here, not touching simulate_federated.py.
 """
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24,27 +25,27 @@ from simulate_basic import simulate, simulate_nonlinear, simulate_survival  # no
 from simulate_binary import simulate_binary  # noqa: E402
 
 
-def _continuous_simulator(shape, theta1, theta2):
+def _continuous_simulator(shape, theta1, theta2) -> Callable[..., tuple]:
     if shape == "linear":
-        def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra):
+        def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra) -> tuple:
             df, truth = simulate(n, n_snps, theta1, h2_x, gamma_x, gamma_y, seed, **extra)
             truth.setdefault("avg_slope", theta1)   # the analysis scripts read it for every outcome
             return df, truth
     else:
-        def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra):
+        def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra) -> tuple:
             return simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed, **extra)
     return sim_fn
 
 
-def _binary_simulator(shape, theta1, theta2, link, prevalence):
-    def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra):
+def _binary_simulator(shape, theta1, theta2, link, prevalence) -> Callable[..., tuple]:
+    def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra) -> tuple:
         return simulate_binary(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y, seed, link, prevalence,
                                **extra)
     return sim_fn
 
 
-def _survival_simulator(theta, weibull_k, weibull_scale, censor_frac, followup):
-    def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra):
+def _survival_simulator(theta, weibull_k, weibull_scale, censor_frac, followup) -> Callable[..., tuple]:
+    def sim_fn(n, n_snps, h2_x, gamma_x, gamma_y, seed, **extra) -> tuple:
         if extra:
             raise ValueError("shared SNPs / pleiotropy are not implemented for the survival simulator")
         df, truth = simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
@@ -56,7 +57,8 @@ def _survival_simulator(theta, weibull_k, weibull_scale, censor_frac, followup):
 
 
 def make_simulator(outcome, shape="quadratic", theta1=0.3, theta2=0.15, link="logistic", prevalence=0.3,
-                    weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0):
+                    weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3,
+                    followup=15.0) -> Callable[..., tuple]:
     """outcome: 'continuous', 'binary', or 'survival'.
 
     shape ('linear', 'quadratic', or 'threshold') applies to 'continuous' and

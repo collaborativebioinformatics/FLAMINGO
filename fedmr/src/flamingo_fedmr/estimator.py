@@ -47,53 +47,82 @@ class Diagnostics:
     n_instruments: int
     n_exogenous: int
     absorbed: int
-    first_stage: dict          # per endogenous column: F, partial_r2, df1, df2, conditional (bool)
+    first_stage: dict[str, dict[str, object]]
 
 
 @dataclass
 class FedMRResult:
     theta: np.ndarray
     cov: np.ndarray
-    w_names: list
+    w_names: list[str]
     N: int
     rss: float
     sigma2: float
     df_resid: int
     diagnostics: Diagnostics
-    robust_cov: np.ndarray = None
+    robust_cov: np.ndarray | None = None
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str) -> float:
         return float(self.theta[self.w_names.index(name)])
 
-    def se(self, name, robust=False):
+    def se(self, name: str, robust: bool = False) -> float:
         i = self.w_names.index(name)
         cov = self.robust_cov if robust else self.cov
         if cov is None:
             raise ValueError("robust covariance not computed; run the robust round")
         return float(np.sqrt(cov[i, i]))
 
-    def theta_by_name(self) -> dict:
+    def theta_by_name(self) -> dict[str, float]:
         return dict(zip(self.w_names, map(float, self.theta)))
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         """JSON-serialisable summary (estimates, both SEs, fit statistics, diagnostics)."""
-        d = self.diagnostics
-        fs = {k: {kk: (float(vv) if isinstance(vv, (int, float, np.floating, np.integer)) and not isinstance(vv, bool) else vv)
-                  for kk, vv in v.items() if kk != "pi"} for k, v in d.first_stage.items()}
-        return {"w_names": list(self.w_names), "theta": [float(t) for t in self.theta],
-                "se": [self.se(n) for n in self.w_names],
-                "robust_se": [self.se(n, True) for n in self.w_names] if self.robust_cov is not None else None,
-                "N": int(self.N), "rss": float(self.rss), "sigma2": float(self.sigma2), "df_resid": int(self.df_resid),
-                "diagnostics": {"rank_A": d.rank_A, "dim_A": d.dim_A, "cond_A": d.cond_A, "cond_M": d.cond_M,
-                                "n_endogenous": d.n_endogenous, "n_instruments": d.n_instruments,
-                                "n_exogenous": d.n_exogenous, "absorbed": d.absorbed, "first_stage": fs}}
+        diagnostics = self.diagnostics
+        first_stage = {
+            name: {key: _json_number(value) for key, value in values.items() if key != "pi"}
+            for name, values in diagnostics.first_stage.items()
+        }
+        return {
+            "w_names": list(self.w_names),
+            "theta": [float(value) for value in self.theta],
+            "se": [self.se(name) for name in self.w_names],
+            "robust_se": [self.se(name, True) for name in self.w_names] if self.robust_cov is not None else None,
+            "N": int(self.N),
+            "rss": float(self.rss),
+            "sigma2": float(self.sigma2),
+            "df_resid": int(self.df_resid),
+            "diagnostics": {
+                "rank_A": diagnostics.rank_A,
+                "dim_A": diagnostics.dim_A,
+                "cond_A": diagnostics.cond_A,
+                "cond_M": diagnostics.cond_M,
+                "n_endogenous": diagnostics.n_endogenous,
+                "n_instruments": diagnostics.n_instruments,
+                "n_exogenous": diagnostics.n_exogenous,
+                "absorbed": diagnostics.absorbed,
+                "first_stage": first_stage,
+            },
+        }
 
 
-def _solve(A, b, what):
+def _json_number(value: object) -> object:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return float(value)
+    return value
+
+
+def _solve(A: np.ndarray, b: np.ndarray, what: str) -> np.ndarray:
     try:
         return np.linalg.solve(A, b)
     except np.linalg.LinAlgError as err:
         raise IdentificationError(f"{what} is singular: {err}") from None
+
+
+def _projection_terms(s: Stats) -> tuple[np.ndarray, np.ndarray]:
+    AinvB = _solve(s.A, s.B, "Z'Z")
+    return AinvB, s.B.T @ AinvB
 
 
 def fit(s: Stats) -> FedMRResult:
@@ -105,10 +134,8 @@ def fit(s: Stats) -> FedMRResult:
     rank_A = int(np.linalg.matrix_rank(s.A))
     if rank_A < dim_A:
         raise IdentificationError(f"Z'Z has rank {rank_A} < {dim_A}: collinear or constant instrument columns")
-    AinvB = _solve(s.A, s.B, "Z'Z")
-    M = s.B.T @ AinvB
-    v = AinvB.T @ s.c
-    theta = _solve(M, v, "B'A^-1B")
+    AinvB, M = _projection_terms(s)
+    theta = _solve(M, AinvB.T @ s.c, "B'A^-1B")
     r = len(theta)
     rss = float(s.f - 2 * theta @ s.e + theta @ s.D @ theta)
     df_resid = s.N - r - lay.absorbed
@@ -122,7 +149,7 @@ def fit(s: Stats) -> FedMRResult:
     return FedMRResult(theta, cov, list(lay.w_names), s.N, rss, sigma2, df_resid, diag)
 
 
-def first_stage_diagnostics(s: Stats) -> dict:
+def first_stage_diagnostics(s: Stats) -> dict[str, dict[str, object]]:
     lay = s.layout
     exog_z = lay.z_index(lay.exogenous) if lay.exogenous else np.array([], dtype=int)
     m = len(lay.instruments)
@@ -155,7 +182,6 @@ def first_stage_diagnostics(s: Stats) -> dict:
 
 def robust_cov(s: Stats, H: np.ndarray) -> np.ndarray:
     """HC0 sandwich from the round-2 sum H = sum_k Z_k' diag(u_k^2) Z_k."""
-    AinvB = _solve(s.A, s.B, "Z'Z")
-    M = s.B.T @ AinvB
+    AinvB, M = _projection_terms(s)
     Minv = _solve(M, np.eye(M.shape[0]), "B'A^-1B")
     return Minv @ AinvB.T @ H @ AinvB @ Minv

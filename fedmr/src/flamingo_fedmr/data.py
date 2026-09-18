@@ -8,6 +8,7 @@ a covariate by its contents.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,10 +24,10 @@ class SiteData:
     G: np.ndarray
     X: np.ndarray
     Y: np.ndarray
-    C: np.ndarray = None
-    cov_names: tuple = ()
+    C: np.ndarray | None = None
+    cov_names: tuple[str, ...] = ()
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.G = np.asarray(self.G, dtype=np.float64)
         self.X = np.asarray(self.X, dtype=np.float64)
         self.Y = np.asarray(self.Y, dtype=np.float64)
@@ -37,22 +38,25 @@ class SiteData:
         assert self.C.shape[1] == len(self.cov_names)
 
     @property
-    def n(self):
+    def n(self) -> int:
         return len(self.X)
 
 
-def _read_csv(path):
+def _read_csv(path: Path) -> tuple[list[str], Callable[[str], np.ndarray]]:
     try:
         import polars as pl
         df = pl.read_csv(path)
-        return list(df.columns), (lambda c: df[c].to_numpy())
     except ImportError:
         import pandas as pd
         df = pd.read_csv(path)
-        return list(df.columns), (lambda c: df[c].to_numpy())
+
+    def column_values(column: str) -> np.ndarray:
+        return df[column].to_numpy()
+
+    return list(df.columns), column_values
 
 
-def load_site_csv(path, name=None, covariates=()) -> SiteData:
+def load_site_csv(path: str | Path, name: str | None = None, covariates: Sequence[str] = ()) -> SiteData:
     for c in covariates:
         if c in ORACLE_COLUMNS:
             raise ValueError(f"{c!r} is a simulator oracle and may not be used as a covariate")
@@ -64,5 +68,5 @@ def load_site_csv(path, name=None, covariates=()) -> SiteData:
     return SiteData(name or path.stem, G, get("X"), get("Y"), C, tuple(covariates))
 
 
-def load_sites(folder, covariates=()) -> list[SiteData]:
+def load_sites(folder: str | Path, covariates: Sequence[str] = ()) -> list[SiteData]:
     return [load_site_csv(p, covariates=covariates) for p in sorted(Path(folder).glob("site*.csv"))]

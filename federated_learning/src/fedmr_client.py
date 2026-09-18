@@ -15,7 +15,7 @@ import flamingo_fedmr as fm
 from flamingo_fedmr import protocols as P
 
 
-def build_design(site, spec, site_index):
+def build_design(site: fm.SiteData, spec: dict[str, object], site_index: int) -> fm.Design:
     """The site-local part of the chosen protocol. The shared-instrument quadratic and
     cross-fit variants need a global first stage and are not wired through NVFlare here.
     Cross-fit folds use seed + site_index, exactly as LocalFirstStageFedMR.run does."""
@@ -26,12 +26,14 @@ def build_design(site, spec, site_index):
         return P.design_shared(site)
     if k:
         xhat = P.crossfit_xhat_local(site, P.fold_ids(site.n, k, int(spec.get("seed", 0)) + site_index), k)
+        first_stage = P.local_first_stage_diagnostics(site)
     else:
         xhat = P.local_first_stage(site)
-    return P.design_generated(site, xhat, basis, P.local_first_stage_diagnostics(site))
+        first_stage = P.local_first_stage_diagnostics(site, xhat)
+    return P.design_generated(site, xhat, basis, first_stage)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--data_dir", required=True)
     p.add_argument("--sites", required=True, help="comma-separated site names in the order the job uses")
@@ -43,16 +45,16 @@ def main():
     site = fm.load_site_csv(os.path.join(args.data_dir, f"{name}.csv"), name=name)
     design = None
     while flare.is_running():
-        m = flare.receive()
-        task = m.meta.get("task")
+        message = flare.receive()
+        task = message.meta.get("task")
         if design is None:
-            design = build_design(site, m.meta, site_index)
+            design = build_design(site, message.meta, site_index)
             print(f"[{name}] n={site.n} design Z{design.Z.shape} W{design.W.shape}", flush=True)
         if task == "stats":
             st = fm.site_stats(design)
             reply = FLModel(params=st.arrays(), params_type=ParamsType.FULL, meta={"fedmr": st.meta()})
         elif task == "robust":
-            H = fm.site_robust_stats(design, m.meta["theta"])
+            H = fm.site_robust_stats(design, message.meta["theta"])
             reply = FLModel(params={"H": H}, params_type=ParamsType.FULL,
                             meta={"fedmr": {"site": name, "z_names": list(design.z_names)}})
         else:

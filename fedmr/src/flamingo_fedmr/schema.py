@@ -19,6 +19,7 @@ the roles do.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -43,15 +44,14 @@ class Design:
     Z: np.ndarray
     W: np.ndarray
     Y: np.ndarray
-    z_names: list
-    w_names: list
-    z_roles: list
-    w_roles: list
+    z_names: list[str]
+    w_names: list[str]
+    z_roles: list[Role]
+    w_roles: list[Role]
     absorbed: int = 1
-    first_stage_local: dict = None   # {"rss_full", "rss_reduced", "n_instruments", "n_params"} when the
-                                     # site fitted its own first stage on the original SNPs
+    first_stage_local: dict[str, float | int] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         assert self.Z.shape[0] == self.W.shape[0] == len(self.Y)
         assert len(self.z_names) == self.Z.shape[1] and len(self.w_names) == self.W.shape[1]
         assert len(self.z_roles) == self.Z.shape[1] and len(self.w_roles) == self.W.shape[1]
@@ -61,54 +61,54 @@ class Design:
             raise ValueError(f"exogenous columns must appear in both Z and W: {exog_z ^ exog_w}")
 
     @property
-    def n(self):
+    def n(self) -> int:
         return len(self.Y)
 
     @property
-    def endogenous(self):
-        return [n for n, r in zip(self.w_names, self.w_roles) if r == Role.ENDOGENOUS]
+    def endogenous(self) -> list[str]:
+        return [name for name, role in zip(self.w_names, self.w_roles) if role == Role.ENDOGENOUS]
 
     @property
-    def instruments(self):
-        return [n for n, r in zip(self.z_names, self.z_roles) if r == Role.INSTRUMENT]
+    def instruments(self) -> list[str]:
+        return [name for name, role in zip(self.z_names, self.z_roles) if role == Role.INSTRUMENT]
 
     @property
-    def exogenous(self):
-        return [n for n, r in zip(self.w_names, self.w_roles) if r == Role.EXOGENOUS]
+    def exogenous(self) -> list[str]:
+        return [name for name, role in zip(self.w_names, self.w_roles) if role == Role.EXOGENOUS]
 
 
 @dataclass
 class Layout:
     """The coordinator's global column layout, the union of the sites' names with their roles."""
-    z_names: list
-    w_names: list
-    z_roles: list
-    w_roles: list
+    z_names: list[str]
+    w_names: list[str]
+    z_roles: list[Role]
+    w_roles: list[Role]
     absorbed: int = 0
-    sites: list = field(default_factory=list)
+    sites: list[str] = field(default_factory=list)
 
     @property
-    def endogenous(self):
-        return [n for n, r in zip(self.w_names, self.w_roles) if r == Role.ENDOGENOUS]
+    def endogenous(self) -> list[str]:
+        return [name for name, role in zip(self.w_names, self.w_roles) if role == Role.ENDOGENOUS]
 
     @property
-    def instruments(self):
-        return [n for n, r in zip(self.z_names, self.z_roles) if r == Role.INSTRUMENT]
+    def instruments(self) -> list[str]:
+        return [name for name, role in zip(self.z_names, self.z_roles) if role == Role.INSTRUMENT]
 
     @property
-    def exogenous(self):
-        return [n for n, r in zip(self.w_names, self.w_roles) if r == Role.EXOGENOUS]
+    def exogenous(self) -> list[str]:
+        return [name for name, role in zip(self.w_names, self.w_roles) if role == Role.EXOGENOUS]
 
-    def z_index(self, names):
-        idx = {n: i for i, n in enumerate(self.z_names)}
-        return np.array([idx[n] for n in names], dtype=int)
+    def z_index(self, names: Sequence[str]) -> np.ndarray:
+        indices = {name: index for index, name in enumerate(self.z_names)}
+        return np.array([indices[name] for name in names], dtype=int)
 
-    def w_index(self, names):
-        idx = {n: i for i, n in enumerate(self.w_names)}
-        return np.array([idx[n] for n in names], dtype=int)
+    def w_index(self, names: Sequence[str]) -> np.ndarray:
+        indices = {name: index for index, name in enumerate(self.w_names)}
+        return np.array([indices[name] for name in names], dtype=int)
 
 
-def centre_within(*arrays):
+def centre_within(*arrays: np.ndarray) -> list[np.ndarray]:
     """Subtract each column's mean: absorbs one intercept per call (one logical site)."""
     out = []
     for a in arrays:

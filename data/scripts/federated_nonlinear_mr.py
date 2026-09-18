@@ -40,7 +40,7 @@ FL_STYLE = {"naive": ("#1baf7a", "federated learning, naive MLP: E[Y | X], no in
             "2sri": ("#4a3aa7", "federated learning, 2SRI MLP: f(X) with first-stage residual as control function")}
 
 
-def load_sites(folder: Path):
+def load_sites(folder: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     sites = []
     for csv in sorted(folder.glob("site*.csv")):
         df = pl.read_csv(csv)
@@ -48,7 +48,7 @@ def load_sites(folder: Path):
     return sites
 
 
-def sumstats_slope(sites):
+def sumstats_slope(sites) -> tuple[float, float]:
     """Meta-analysis of per-site IVW slopes, exactly as the sumstats route computes it."""
     est, w = [], []
     for G, X, Y in sites:
@@ -60,7 +60,7 @@ def sumstats_slope(sites):
     return float(np.sum(w * est) / np.sum(w)), float(np.sqrt(1 / np.sum(w)))
 
 
-def federated_curve(path: Path, x):
+def federated_curve(path: Path, x: np.ndarray) -> tuple[np.ndarray, int] | None:
     """Last-round global-model f(X) from the NVFlare run, centred at X = 0 and
     interpolated onto x. Returns (curve, round) or None if the file is missing."""
     if not path.exists():
@@ -73,7 +73,7 @@ def federated_curve(path: Path, x):
     return np.interp(x, xs, fs), int(last)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--shape", choices=["quadratic", "threshold"], default="quadratic")
     p.add_argument("--sites", type=Path, default=None)

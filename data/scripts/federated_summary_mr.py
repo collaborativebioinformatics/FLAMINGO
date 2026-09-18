@@ -37,7 +37,7 @@ SITE_COLOR, SUMSTATS_COLOR, FED_COLOR, FEDMR_COLOR, INK, MUTED, GRID = ("#2a78d6
 FL_RESULTS = Path(__file__).resolve().parents[2] / "federated_learning" / "results"
 
 
-def gwas(G, y):
+def gwas(G, y) -> tuple[np.ndarray, np.ndarray]:
     """Per-SNP simple linear regression of y on each column of G. Returns (beta, se)."""
     Gc = G - G.mean(axis=0)
     yc = y - y.mean()
@@ -49,7 +49,7 @@ def gwas(G, y):
     return beta, np.sqrt(sigma2 / sxx)
 
 
-def cox_gwas(G, time, event):
+def cox_gwas(G, time, event) -> tuple[np.ndarray, np.ndarray]:
     """Per-SNP Cox regression of (time, event) on each column of G. Returns (log HR, se)."""
     beta, se = np.empty(G.shape[1]), np.empty(G.shape[1])
     for j in range(G.shape[1]):
@@ -59,7 +59,7 @@ def cox_gwas(G, time, event):
     return beta, se
 
 
-def ivw(bx, by, se_y):
+def ivw(bx, by, se_y) -> tuple[float, float]:
     """Inverse-variance weighted MR slope through the origin, with its standard error."""
     w = 1.0 / se_y**2
     est = np.sum(w * bx * by) / np.sum(w * bx**2)
@@ -67,7 +67,7 @@ def ivw(bx, by, se_y):
     return est, se
 
 
-def _first_stage(sites):
+def _first_stage(sites) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Per-site first stage: each site's SNPs predict only its own people."""
     xhat, X, Y, site_idx = [], [], [], []
     for k, (G, x, y) in enumerate(sites):
@@ -77,7 +77,7 @@ def _first_stage(sites):
     return tuple(map(np.concatenate, (xhat, X, Y, site_idx)))
 
 
-def pooled_2sps_cox(sites):
+def pooled_2sps_cox(sites) -> tuple[float, float, float]:
     """Concatenate all sites and fit one Cox model on the SNP-predicted X, stratified by site."""
     xhat, X, Y, site_idx = _first_stage(sites)
     d = pd.DataFrame({"time": Y[:, 0], "event": Y[:, 1], "Xhat": xhat, "X": X, "site": site_idx})
@@ -87,7 +87,7 @@ def pooled_2sps_cox(sites):
             float(naive.params_["X"]))
 
 
-def tsls(D, Z, Y):
+def tsls(D, Z, Y) -> tuple[np.ndarray, np.ndarray]:
     """Generic 2SLS of Y on regressors D with instruments Z. Returns (coef, covariance)."""
     Dhat = Z @ np.linalg.lstsq(Z, D, rcond=None)[0]
     coef = np.linalg.lstsq(Dhat, Y, rcond=None)[0]
@@ -96,7 +96,7 @@ def tsls(D, Z, Y):
     return coef, sigma2 * np.linalg.inv(Dhat.T @ Dhat)
 
 
-def quadratic_2sls(sites):
+def quadratic_2sls(sites) -> tuple[np.ndarray, np.ndarray]:
     """2SLS with X and X^2 as endogenous regressors, instrumented by the SNP-predicted X and its
     square, with site intercepts. Returns (theta[2], cov[2x2]). A single site is a list of one."""
     xhat, X, Y, site_idx = _first_stage(sites)
@@ -105,7 +105,7 @@ def quadratic_2sls(sites):
     return coef[:2], cov[:2, :2]
 
 
-def multivariate_meta(thetas, covs):
+def multivariate_meta(thetas, covs) -> tuple[np.ndarray, np.ndarray]:
     """Inverse-variance meta-analysis of vector estimates with their covariances."""
     W = [np.linalg.inv(c) for c in covs]
     cov = np.linalg.inv(sum(W))
@@ -113,7 +113,7 @@ def multivariate_meta(thetas, covs):
     return theta, cov
 
 
-def pooled_2sls(sites: list[tuple[np.ndarray, np.ndarray, np.ndarray]]):
+def pooled_2sls(sites: list[tuple[np.ndarray, np.ndarray, np.ndarray]]) -> tuple[float, float, float]:
     """Concatenate all sites and fit one 2SLS with site-specific first stages and site intercepts."""
     xhat, X, Y, site_idx = _first_stage(sites)
     D = np.column_stack([xhat, np.eye(len(sites))[site_idx]])
@@ -167,7 +167,7 @@ site_summary.raw = []
 site_summary.models = []
 
 
-def _family_rows(ax, y_sites, rows_y, res, n_all, families):
+def _family_rows(ax, y_sites, rows_y, res, n_all, families) -> None:
     """Y tick labels for site rows and the family-grouped combined rows."""
     ticks = list(y_sites) + [rows_y[k] for k in families]
     labels = [f"{s}  (n={n:,}, F={f:.0f})" for s, n, f in zip(res["site"], res["n"], res["mean_F"])]
@@ -177,7 +177,7 @@ def _family_rows(ax, y_sites, rows_y, res, n_all, families):
 
 
 def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, target_label, shape, out: Path,
-           fedmr=None):
+           fedmr=None) -> None:
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
     rows_y = {"sumstats": -1, "federated": -2.2, "fedmr": -3.4, "pooled": -4.6}
@@ -219,7 +219,7 @@ def forest(res, meta, meta_se, pooled, pooled_se, pooled_naive, fl, target, targ
     fig.savefig(out)
 
 
-def fedmr_row(dataset: str, curved: bool):
+def fedmr_row(dataset: str, curved: bool) -> tuple[float, float, float | None, float | None] | None:
     """FedMR estimate from results/fedmr.<dataset>.csv (scripts/federated_exact_mr.py), or None.
     Returns (theta1, se1, theta2, se2); theta2 and se2 are None for the linear layout."""
     path = Path("results") / f"fedmr.{dataset}.csv"
@@ -233,7 +233,7 @@ def fedmr_row(dataset: str, curved: bool):
     return r["theta1"], r["se1"], r["theta2"], r["se2"]
 
 
-def fl_curve(method: str, dataset: str):
+def fl_curve(method: str, dataset: str) -> tuple[np.ndarray, np.ndarray] | None:
     """Last-round global-model curve f(x) from the NVFlare run, or None if that run is missing."""
     path = FL_RESULTS / method / dataset / "curves.csv"
     if not path.exists():
@@ -244,7 +244,7 @@ def fl_curve(method: str, dataset: str):
     return c["x"].to_numpy(), c["f"].to_numpy()
 
 
-def fl_params(dataset: str, curved: bool, x_max: float = 2.0):
+def fl_params(dataset: str, curved: bool, x_max: float = 2.0) -> dict[str, tuple[float, ...]]:
     """Summarise the federated curves into the forest's parameters by least squares on |x| <= x_max.
     Returns {"2sri": (theta1, theta2) or (slope,), "naive": ...} for the runs that exist."""
     out = {}
@@ -260,7 +260,7 @@ def fl_params(dataset: str, curved: bool, x_max: float = 2.0):
     return out
 
 
-def _style(ax):
+def _style(ax) -> None:
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     for sp in ("left", "bottom"):
@@ -271,7 +271,7 @@ def _style(ax):
 
 
 def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_cov, pooled_naive, fl,
-                  avg_slope_target, shape, theta1, theta2, out: Path, fedmr=None):
+                  avg_slope_target, shape, theta1, theta2, out: Path, fedmr=None) -> None:
     """Two columns, one per parameter of the quadratic basis. Rows: sites, then the three families."""
     sites = res["site"].to_list()
     y = np.arange(len(sites))[::-1]
@@ -352,7 +352,7 @@ def forest_curved(res, meta, meta_se, model_meta, model_cov, pooled_q, pooled_co
     fig.savefig(out)
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--shape", choices=["linear", "quadratic", "threshold", "cox"], default="linear")
     p.add_argument("--sites", type=Path, default=None, help="default simulated_data/federated/<shape>")

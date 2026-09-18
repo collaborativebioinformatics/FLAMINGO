@@ -40,7 +40,7 @@ from job import simulator_run  # noqa: E402
 TOL = 1e-10
 
 
-def pooled_reference(sites, basis):
+def pooled_reference(sites: list[fm.SiteData], basis: str) -> dict[str, float]:
     """The repo's concatenated fit for site-specific SNPs, re-done here in numpy (the data scripts
     need polars): per-site first stage X ~ [1, G], then one 2SLS on the stacked rows with site
     dummies, on [X] or [X, X^2] instrumented by [xhat] or [xhat, xhat^2]. This is the arithmetic
@@ -50,11 +50,14 @@ def pooled_reference(sites, basis):
     for k, s in enumerate(sites):
         Z1 = np.column_stack([np.ones(s.n), s.G])
         xhat = Z1 @ np.linalg.lstsq(Z1, s.X, rcond=None)[0]
-        S = np.zeros((s.n, K)); S[:, k] = 1
+        S = np.zeros((s.n, K))
+        S[:, k] = 1
         if basis == "quadratic":
-            Zs.append(np.column_stack([xhat, xhat**2, S])); Ws.append(np.column_stack([s.X, s.X**2, S]))
+            Zs.append(np.column_stack([xhat, xhat**2, S]))
+            Ws.append(np.column_stack([s.X, s.X**2, S]))
         else:
-            Zs.append(np.column_stack([xhat, S])); Ws.append(np.column_stack([s.X, S]))
+            Zs.append(np.column_stack([xhat, S]))
+            Ws.append(np.column_stack([s.X, S]))
         Ys.append(s.Y)
     Z, W, Y = np.vstack(Zs), np.vstack(Ws), np.concatenate(Ys)
     P = Z @ np.linalg.lstsq(Z, W, rcond=None)[0]
@@ -62,9 +65,10 @@ def pooled_reference(sites, basis):
     return {"X": float(theta[0]), "X2": float(theta[1])} if basis == "quadratic" else {"X": float(theta[0])}
 
 
-def run_dataset(dataset, args):
+def run_dataset(dataset: str, args: argparse.Namespace) -> dict[str, object] | None:
     data_dir = os.path.join(FED_DIR, dataset)
-    manifest = json.load(open(os.path.join(data_dir, "manifest.json")))
+    with open(os.path.join(data_dir, "manifest.json")) as manifest_file:
+        manifest = json.load(manifest_file)
     head = pd.read_csv(sorted(glob.glob(os.path.join(data_dir, "site*.csv")))[0], nrows=2000)
     if "Y" not in head.columns or manifest.get("outcome") == "binary" or set(head["Y"].unique()) <= {0, 1}:
         print(f"skip {dataset}: not a continuous outcome (FedMR v1 is linear 2SLS on a continuous Y)", flush=True)
@@ -90,14 +94,15 @@ def run_dataset(dataset, args):
     workspace = os.path.join(args.workspace, "fedmr", dataset)
     simulator_run(job, workspace, sites, len(sites), args.task_interval)
 
-    nv = json.load(open(out_path))
+    with open(out_path) as result_file:
+        nv = json.load(result_file)
     nv_theta = dict(zip(nv["w_names"], nv["theta"]))
     nv_rse = dict(zip(nv["w_names"], nv["robust_se"]))
 
     # the same protocol in-process, from the same files
     data = fm.load_sites(data_dir)
-    Proto = fm.SharedInstrumentFedMR if protocol == "shared" else fm.LocalFirstStageFedMR
-    local = Proto(basis=args.basis, crossfit=args.crossfit, robust=True).run(data).result
+    protocol_class = fm.SharedInstrumentFedMR if protocol == "shared" else fm.LocalFirstStageFedMR
+    local = protocol_class(basis=args.basis, crossfit=args.crossfit, robust=True).run(data).result
     d_local = max(abs(nv_theta[n] - local[n]) for n in local.w_names)
     d_rse = max(abs(nv_rse[n] - local.se(n, True)) for n in local.w_names)
     line = {"dataset": dataset, "protocol": protocol, "basis": args.basis, "crossfit": args.crossfit,
@@ -119,7 +124,7 @@ def run_dataset(dataset, args):
     return line
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--dataset", action="append", help="subfolder of data/simulated_data/federated/ (repeatable)")
     p.add_argument("--all", action="store_true", help="every continuous dataset")
@@ -132,7 +137,11 @@ def main():
         datasets = sorted(d for d in os.listdir(FED_DIR) if os.path.isfile(os.path.join(FED_DIR, d, "manifest.json")))
     else:
         datasets = args.dataset or ["linear"]
-    lines = [ln for ln in (run_dataset(d, args) for d in datasets) if ln]
+    lines = []
+    for dataset in datasets:
+        result = run_dataset(dataset, args)
+        if result is not None:
+            lines.append(result)
     if not lines:
         print("no continuous dataset was run; nothing to summarise")
         return

@@ -62,7 +62,7 @@ def _pleiotropy(G, maf, alpha) -> np.ndarray | float:
     return (G - 2 * maf) @ np.asarray(alpha, dtype=float)
 
 
-def _frame(n, G, U, X, Y):
+def _frame(n, G, U, X, Y) -> pl.DataFrame:
     snp_cols = {f"snp{j}": G[:, j] for j in range(G.shape[1])}
     return pl.DataFrame({"id": np.arange(n), **snp_cols, "U": U, "X": X, "Y": Y})
 
@@ -83,7 +83,7 @@ def simulate(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed, maf=None, beta=None
     return _frame(n, G, U, X, Y), truth
 
 
-def causal_curve(shape, x, theta1, theta2):
+def causal_curve(shape, x, theta1, theta2) -> np.ndarray:
     """f(x): the true causal effect of X on Y, minus confounding and noise.
 
     quadratic: theta1 * x + theta2 * x^2
@@ -124,7 +124,7 @@ def simulate_nonlinear(n, n_snps, shape, theta1, theta2, h2_x, gamma_x, gamma_y,
 
 
 def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
-                      weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0):
+                      weibull_k=1.5, weibull_scale=10.0, censor_frac=0.3, followup=15.0) -> tuple:
     """Cox proportional-hazards outcome: h(t) = h0(t) exp(theta X + gamma_y U).
 
     h0 is Weibull with shape weibull_k and scale weibull_scale, so event times are
@@ -159,7 +159,7 @@ def simulate_survival(n, n_snps, theta, h2_x, gamma_x, gamma_y, seed,
     return df, truth
 
 
-def main():
+def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--n", type=int, default=10_000)
     p.add_argument("--n-snps", type=int, default=20)

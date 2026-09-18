@@ -31,10 +31,10 @@ class SiteStats:
     site: str
     n: int
     absorbed: int
-    z_names: list
-    w_names: list
-    z_roles: list
-    w_roles: list
+    z_names: list[str]
+    w_names: list[str]
+    z_roles: list[Role]
+    w_roles: list[Role]
     A: np.ndarray
     B: np.ndarray
     c: np.ndarray
@@ -43,25 +43,25 @@ class SiteStats:
     f: float
     # optional: the site's own first stage on its original SNPs, so the coordinator can report
     # an F for the SNP set rather than for the single generated instrument
-    fs_rss_full: float = None
-    fs_rss_reduced: float = None
+    fs_rss_full: float | None = None
+    fs_rss_reduced: float | None = None
     fs_n_instruments: int = 0
     fs_n_params: int = 0
 
     # --- transport: arrays for the payload, plain python for the metadata (e.g. NVFlare FLModel)
-    def arrays(self) -> dict:
+    def arrays(self) -> dict[str, np.ndarray]:
         scalars = np.array([self.f, self.n, self.absorbed,
                             np.nan if self.fs_rss_full is None else self.fs_rss_full,
                             np.nan if self.fs_rss_reduced is None else self.fs_rss_reduced,
                             self.fs_n_instruments, self.fs_n_params], dtype=np.float64)
         return {"A": self.A, "B": self.B, "c": self.c, "D": self.D, "e": self.e, "scalars": scalars}
 
-    def meta(self) -> dict:
+    def meta(self) -> dict[str, object]:
         return {"site": self.site, "z_names": list(self.z_names), "w_names": list(self.w_names),
                 "z_roles": [Role(r).value for r in self.z_roles], "w_roles": [Role(r).value for r in self.w_roles]}
 
     @classmethod
-    def from_transport(cls, arrays: dict, meta: dict) -> "SiteStats":
+    def from_transport(cls, arrays: dict[str, np.ndarray], meta: dict[str, object]) -> "SiteStats":
         arr = {k: np.asarray(v, dtype=np.float64) for k, v in arrays.items()}
         f, n, absorbed, rss_full, rss_red, n_inst, n_par = arr["scalars"].tolist()
         return cls(site=meta["site"], n=int(round(n)), absorbed=int(round(absorbed)),
@@ -83,7 +83,7 @@ def site_stats(d: Design) -> SiteStats:
                      fs_n_instruments=fs.get("n_instruments", 0), fs_n_params=fs.get("n_params", 0))
 
 
-def site_robust_stats(d: Design, theta_by_name: dict) -> np.ndarray:
+def site_robust_stats(d: Design, theta_by_name: dict[str, float]) -> np.ndarray:
     """H = Z' diag(u^2) Z with u = Y - W theta, theta aligned to this site's W columns."""
     theta = np.array([theta_by_name[nm] for nm in d.w_names])
     u = d.Y - d.W @ theta
@@ -101,10 +101,10 @@ class Stats:
     D: np.ndarray
     e: np.ndarray
     f: float
-    first_stage_local: dict = None   # summed local first-stage diagnostics, or None
+    first_stage_local: dict[str, float | int] | None = None
 
 
-def _union(named_roles) -> tuple[list, list]:
+def _union(named_roles) -> tuple[list[str], list[Role]]:
     """Insertion-ordered union of (name, role) pairs; a name may not change role between sites."""
     roles: dict = {}
     for names, rs in named_roles:
@@ -146,7 +146,7 @@ def aggregate(parts: list[SiteStats]) -> Stats:
     return Stats(layout, N, A, B, c, D, e, f, fs)
 
 
-def aggregate_robust(parts: list[tuple[list, np.ndarray]], layout: Layout) -> np.ndarray:
+def aggregate_robust(parts: list[tuple[list[str], np.ndarray]], layout: Layout) -> np.ndarray:
     """Sum the sites' H into the global Z layout. parts: [(site z_names, H), ...]."""
     H = np.zeros((len(layout.z_names), len(layout.z_names)))
     for names, Hk in parts:

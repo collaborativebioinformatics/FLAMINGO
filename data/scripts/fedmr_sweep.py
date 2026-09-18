@@ -78,7 +78,7 @@ AXES = {
 }
 
 
-def site_sizes(rng: np.random.Generator, cfg: dict) -> np.ndarray | None:
+def site_sizes(_rng: np.random.Generator, cfg: dict) -> np.ndarray | None:
     K = cfg["n_sites"]
     if cfg["sizes"] == "equal":
         return np.full(K, (cfg["pop_min"] + cfg["pop_max"]) // 2)
@@ -103,8 +103,8 @@ def simulate_sites(cfg: dict, seed: int) -> tuple[list, list]:
     for i in range(cfg["n_sites"]):
         site_seed = seed * 1000 + i + 1
         t1 = float(het.theta1[i])
-        df, truth = simulate(int(n[i]), cfg["n_snps"], t1, float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]),
-                             site_seed, **het.extra(site_seed))
+        df, _ = simulate(int(n[i]), cfg["n_snps"], t1, float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]),
+                         site_seed, **het.extra(site_seed))
         G = df.select(pl.col("^snp.*$")).to_numpy().astype(float)
         sites.append(fm.SiteData(f"site{i + 1:02d}", G, df["X"].to_numpy(), df["Y"].to_numpy()))
         thetas.append(t1)
@@ -127,10 +127,10 @@ def pooled_estimand(run, thetas: list) -> float:
 def estimate_all(sites: list, thetas: list, shared: bool) -> tuple[dict, float, float, float]:
     """Estimates and SEs per route, the identity gap |FedMR - pooled|, the estimand, and the SNP-set F."""
     raw = [(s.G, s.X, s.Y) for s in sites]
-    Proto = fm.SharedInstrumentFedMR if shared else fm.LocalFirstStageFedMR
+    protocol_class = fm.SharedInstrumentFedMR if shared else fm.LocalFirstStageFedMR
     pooled, pooled_se, _ = pooled_2sls_shared(sites) if shared else pooled_2sls(raw)
-    run = Proto(robust=False).run(sites)
-    cf = Proto(robust=False, crossfit=5).run(sites).result
+    run = protocol_class(robust=False).run(sites)
+    cf = protocol_class(robust=False, crossfit=5).run(sites).result
     out = {"pooled": (pooled, pooled_se), "fedmr_cf": (cf["X"], cf.se("X"))}
     est, se = zip(*[pooled_2sls([r])[:2] for r in raw])
     w = 1 / np.array(se) ** 2
@@ -182,11 +182,13 @@ def plot(summary: pl.DataFrame, out: Path) -> None:
         axs[0, j].axhline(0, color=INK, linewidth=0.8, linestyle="--")
         axs[1, j].axhline(0.95, color=INK, linewidth=0.8, linestyle="--")
         axs[0, j].set_title(axis.replace("_", " "), loc="left", fontsize=10, color=INK)
-        for r_ in (0, 1):
-            axs[r_, j].set_xticks(x); axs[r_, j].set_xticklabels(levels, rotation=25, ha="right", fontsize=8)
-            for sp in ("top", "right"):
-                axs[r_, j].spines[sp].set_visible(False)
-            axs[r_, j].grid(color=GRID, linewidth=0.6); axs[r_, j].set_axisbelow(True)
+        for row in (0, 1):
+            axs[row, j].set_xticks(x)
+            axs[row, j].set_xticklabels(levels, rotation=25, ha="right", fontsize=8)
+            for spine in ("top", "right"):
+                axs[row, j].spines[spine].set_visible(False)
+            axs[row, j].grid(color=GRID, linewidth=0.6)
+            axs[row, j].set_axisbelow(True)
         axs[1, j].set_ylim(0.5, 1.0)
     axs[0, 0].set_ylabel("bias (dot) and RMSE (bar)")
     axs[1, 0].set_ylabel("95% coverage")

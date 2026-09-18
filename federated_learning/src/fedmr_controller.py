@@ -20,12 +20,13 @@ import flamingo_fedmr as fm
 
 
 class FedMRController(ModelController):
-    def __init__(self, protocol="local", basis="linear", crossfit=0, robust=True, out_path="", seed=0, **kwargs):
+    def __init__(self, protocol: str = "local", basis: str = "linear", crossfit: int = 0,
+                 robust: bool = True, out_path: str = "", seed: int = 0, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self.protocol, self.basis, self.crossfit, self.robust, self.out_path = protocol, basis, crossfit, robust, out_path
         self.seed = seed
 
-    def run(self):
+    def run(self) -> None:
         spec = {"protocol": self.protocol, "basis": self.basis, "crossfit": self.crossfit, "seed": self.seed}
         self.info(f"FedMR round 0: collecting sufficient statistics ({spec})")
         replies = self.send_model_and_wait(
@@ -35,8 +36,8 @@ class FedMRController(ModelController):
         stats = fm.aggregate(parts)
         res = fm.fit(stats)
         rounds = 1
-        self.info(f"FedMR fit over {len(parts)} sites, N = {stats.N}: " +
-                  ", ".join(f"{n} = {res[n]:.6f} ({res.se(n):.6f})" for n in res.w_names))
+        estimates = ", ".join(f"{name} = {res[name]:.6f} ({res.se(name):.6f})" for name in res.w_names)
+        self.info(f"FedMR fit over {len(parts)} sites, N = {stats.N}: {estimates}")
 
         if self.robust:
             self.info("FedMR round 1: robust covariance")
@@ -52,6 +53,6 @@ class FedMRController(ModelController):
         out = {"sites": stats.layout.sites, "rounds": rounds, "spec": spec, **res.to_dict()}
         if self.out_path:
             os.makedirs(os.path.dirname(self.out_path), exist_ok=True)
-            with open(self.out_path, "w") as f:
-                json.dump(out, f, indent=1)
+            with open(self.out_path, "w") as output_file:
+                json.dump(out, output_file, indent=1)
             self.info(f"wrote {self.out_path}")

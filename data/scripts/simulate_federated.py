@@ -46,9 +46,9 @@ def run_federated(make_sim, n_sites, n_snps, pop_min, pop_max,
     manifest = []
     for i in range(n_sites):
         site_seed = seed + i + 1
-        extra = het.extra(site_seed) if het else {}
+        simulator_options = het.extra(site_seed) if het else {}
         df, truth = sim_fns[i](int(n[i]), n_snps, float(h2_x[i]), float(gamma_x[i]), float(gamma_y[i]),
-                               site_seed, **extra)
+                               site_seed, **simulator_options)
         h2_x[i] = truth.get("h2_x", h2_x[i])          # realized value when SNPs are shared
         site_id = f"site{i + 1:02d}"
         df.write_csv(out_dir / f"{site_id}.csv")
@@ -65,13 +65,13 @@ def run_federated(make_sim, n_sites, n_snps, pop_min, pop_max,
         manifest.append(entry)
 
         if "prevalence_realized" in truth:
-            extra = f"  prevalence={truth['prevalence_realized']:.3f}"
+            outcome_detail = f"  prevalence={truth['prevalence_realized']:.3f}"
         elif "event_rate" in truth:
-            extra = f"  event_rate={truth['event_rate']:.3f}"
+            outcome_detail = f"  event_rate={truth['event_rate']:.3f}"
         else:
-            extra = ""
+            outcome_detail = ""
         print(f"{site_id}: n={int(n[i]):>6,}  h2_x={h2_x[i]:.3f}  "
-              f"gamma_x={gamma_x[i]:.3f}  gamma_y={gamma_y[i]:.3f}{extra}")
+              f"gamma_x={gamma_x[i]:.3f}  gamma_y={gamma_y[i]:.3f}{outcome_detail}")
 
     pl.DataFrame(manifest).write_csv(out_dir / "manifest.csv")
     return manifest, (het.manifest() if het else {})
@@ -120,9 +120,10 @@ def main() -> None:
 
     out = a.out or default_out_dir(a.outcome, a.shape, a.link)
     # theta1 is closed over by the simulator, so run_federated asks for one closure per site
-    def make_sim(theta1):
+    def make_sim(theta1: float | None):
         return make_simulator(a.outcome, a.shape, a.theta1 if theta1 is None else theta1, a.theta2, a.link,
                               a.prevalence, a.weibull_k, a.weibull_scale, a.censor_frac, a.followup)
+
     manifest, het_meta = run_federated(make_sim, a.n_sites, a.n_snps, a.pop_min, a.pop_max,
                                        a.h2x_mean, a.h2x_kappa, a.gamma_mean, a.gamma_kappa, a.seed, out, a)
 
