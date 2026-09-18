@@ -11,7 +11,8 @@ Federated-learning routes (optional, for contrast), from ../federated_learning:
 the NVFlare FedAvg MLP fitted naively (E[Y | X], confounded) and as a
 federated 2SRI Mendelian randomization (site-local first stage X ~ SNPs, then
 a federated f(X) + c * residual, whose f is the causal curve). Read from
-federated_learning/results/<method>/<shape>/curves.csv when present.
+federated_learning/results/<method>/<shape>/curves.csv when present;
+--federated_methods picks which of them are drawn (default both).
 
 Writes results/nonlinear.<shape>.png (dose-response curves) and prints the
 coefficient estimates.
@@ -37,7 +38,7 @@ from simulate_basic import causal_curve  # noqa: E402
 
 POOLED_COLOR, SUMSTATS_COLOR, FED2SLS_COLOR, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#8a2be2", "#1f1f1e", "#6b6a63", "#e6e5df"
 FL_STYLE = {"naive": ("#1baf7a", "federated learning, naive MLP: E[Y | X], no instruments (confounded)"),
-            "2sri": ("#4a3aa7", "federated learning, 2SRI MLP: f(X) with first-stage residual as control function")}
+            "2sri": ("#4a3aa7", "federated MR · 2SRI (FedAvg MLP): f(X), first-stage residual as control function")}
 
 
 def load_sites(folder: Path) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
@@ -80,6 +81,8 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=None)
     p.add_argument("--federated", type=Path, default=None,
                    help="results/ root of the NVFlare runs (default: ../federated_learning/results)")
+    p.add_argument("--federated_methods", nargs="+", choices=list(FL_STYLE), default=list(FL_STYLE),
+                   help="which federated-learning curves to draw when present (default: all)")
     a = p.parse_args()
     a.federated = a.federated or Path(__file__).resolve().parents[2] / "federated_learning" / "results"
     a.sites = a.sites or Path("simulated_data/federated") / a.shape
@@ -109,7 +112,7 @@ def main() -> None:
     fit = basis @ theta
     fit_se = np.sqrt(np.einsum("ij,jk,ik->i", basis, cov, basis))
     line = slope * x
-    fl = {m: federated_curve(a.federated / m / a.shape / "curves.csv", x) for m in FL_STYLE}
+    fl = {m: federated_curve(a.federated / m / a.shape / "curves.csv", x) for m in a.federated_methods}
 
     fig, ax = plt.subplots(figsize=(8, 5), dpi=150)
     ax.fill_between(x, fit - 1.96 * fit_se, fit + 1.96 * fit_se, color=POOLED_COLOR, alpha=0.18, linewidth=0)
@@ -120,6 +123,8 @@ def main() -> None:
     ax.plot(x, basis @ fm_theta, color=FED2SLS_COLOR, linewidth=1.4, linestyle=(0, (1, 2)),
             label=f"federated: Fed-2SLS sufficient statistics, identical to concatenated (|Δθ| = {fm_diff:.0e})")
     for m, (color, label) in FL_STYLE.items():
+        if m not in fl:
+            continue
         if fl[m] is None:
             print(f"no federated {m} curve under {a.federated}; run federated_learning/job.py "
                   f"--dataset {a.shape} --method {m} to add it")

@@ -200,26 +200,33 @@ def _federated_argv(p: dict, paths: RunPaths) -> list:
     return argv
 
 
-# Output labels double as section headings in the dashboard, so they read as titles.
+# One name per federated method, used for the output headings and the estimator table.
+# Each says whether it is MR, which MR design, and how it is federated.
 METHOD_LABELS = {
-    "naive": "Federated · naive (no instruments)",
-    "2sri": "Federated · 2SRI (control function)",
-    "2sps": "Federated · 2SPS (predicted exposure)",
-    "fed2sls": "Federated · Fed-2SLS (exact 2SLS from summed statistics)",
+    "naive": "Federated naive · FedAvg, no instruments (not MR)",
+    "2sri": "Federated MR · 2SRI (control function), FedAvg",
+    "2sps": "Federated MR · 2SPS (predicted exposure), FedAvg",
+    "fed2sls": "Federated MR · Fed-2SLS (exact 2SLS from summed statistics)",
 }
+
+
+def method_label(method: str) -> str:
+    return METHOD_LABELS.get(method, f"Federated · {method}")
 
 
 def _federated_outputs(p: dict, paths: RunPaths) -> dict:
     out = {}
     for method in p["fl_methods"]:
-        label = METHOD_LABELS.get(method, f"Federated · {method}")
-        out[label] = paths.fl / method / p["shape"] / "fitted_curve.png"
+        out[method_label(method)] = paths.fl / method / p["shape"] / "fitted_curve.png"
     out["Federated · all methods"] = paths.fl / "fitted_curves_all.png"
     return out
 
 
 def _sumstats_stem(p: dict, paths: RunPaths) -> Path:
     return paths.results / f"sumstats.{p['shape']}"
+
+
+NONLINEAR_FL_CURVES = ("2sri",)   # federated curves drawn on the dose-response plot
 
 
 def _nonlinear_png(p: dict, paths: RunPaths) -> Path:
@@ -242,7 +249,7 @@ PIPELINE: tuple[Step, ...] = (
     # estimator on the same forest and dose-response plots.
     Step(
         key="federated",
-        label="Federated learning (NVFlare FedAvg and Fed-2SLS)",
+        label="Federated learning (FedAvg: naive, MR 2SRI / 2SPS; Fed-2SLS exact 2SLS)",
         script=FL_DIR / "job.py",
         python=FL_PYTHON,
         cwd=FL_DIR,
@@ -275,9 +282,12 @@ PIPELINE: tuple[Step, ...] = (
             "--sites", paths.sites_for(p["shape"]),
             "--out", _nonlinear_png(p, paths),
             "--federated", paths.fl,
+            # only the MR fit on the dose-response plot; the naive FedAvg curve stays in the table
+            "--federated_methods", *NONLINEAR_FL_CURVES,
         ],
         outputs=lambda p, paths: {"Dose–response curve": _nonlinear_png(p, paths)},
         applies=lambda p: p["shape"] in CURVED_SHAPES,
+        signature=lambda p: {"federated_methods": list(NONLINEAR_FL_CURVES)},
     ),
 )
 

@@ -144,7 +144,7 @@ under to count as reusable. The federated step is the worked example:
 ```python
 Step(
     key="federated",
-    label="Federated learning (NVFlare FedAvg and Fed-2SLS)",
+    label="Federated learning (FedAvg: naive, MR 2SRI / 2SPS; Fed-2SLS exact 2SLS)",
     script=FL_DIR / "job.py",
     python=FL_PYTHON,
     cwd=FL_DIR,

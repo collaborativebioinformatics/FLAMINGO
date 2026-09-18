@@ -326,10 +326,10 @@ def comparison_table(summary: dict, federated: dict, params: dict) -> pl.DataFra
         rows.append(row("Concatenated 2SLS", "pooled individual rows", est, None, se))
     if "fed2sls" in summary:
         v = summary["fed2sls"]
-        rows.append(row("Federated Fed-2SLS (exact pooled 2SLS)", "summed sufficient statistics", v[0],
+        rows.append(row(runner.method_label("fed2sls"), "summed sufficient statistics", v[0],
                         v[2] if len(v) > 2 else None, v[1]))
     for method, coef in sorted(federated.items()):
-        rows.append(row(f"Federated FedAvg · {method}", "model updates only",
+        rows.append(row(runner.method_label(method), "model updates only",
                         coef[0], coef[1] if len(coef) > 1 else None))
     if "pooled_naive" in summary:
         rows.append(row("Pooled naive (no instruments)", "pooled individual rows",
