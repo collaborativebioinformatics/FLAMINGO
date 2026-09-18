@@ -18,6 +18,7 @@ the parameter files used to generate benchmark datasets.
 | `docs/federated-rare-events.md` | Scenario 2, negative result: few events per site does not separate sumstats from pooled Cox |
 | `docs/federated-exact-mr.md` | FedMR: exact federated 2SLS from summed sufficient statistics; protocols, identity checks, NVFlare run, seed sweep |
 | `docs/fedmr-plan.md` | The FedMR plan as revised after review, with status per work package |
+| `docs/fedmr-branch-notes.html` | Self-contained page explaining what the `fedmr` branch adds: background, variables and shapes, protocols, verification, sweep, review history, references |
 | `docs/simmrd-review.md` | Source-level review of simmrd: API, outputs, limits |
 | `scripts/simulate_basic.py` | Pure-Python generator: linear, quadratic, threshold, or Cox survival outcome; no pleiotropy, no LD |
 | `scripts/simulate_binary.py` | Same exposure model with a 0/1 outcome from a liability or logistic link at a target prevalence |

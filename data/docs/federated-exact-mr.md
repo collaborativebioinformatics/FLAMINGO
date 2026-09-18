@@ -147,6 +147,39 @@ that site's number regardless of masking. A threat model, key exchange,
 collusion threshold and dropout handling are all needed before any masking
 scheme could be called privacy-preserving, and none is claimed here.
 
+## Scaling with the number of SNPs
+
+What grows with the SNP count `m` is the instrument cross-product `A = Z'Z`,
+and only under the shared-instrument protocol, where `Z` holds the raw SNP
+columns and `A` is `m x m` per site:
+
+| SNPs m | A per site (float64, symmetric half) | B, c per site |
+|---|---|---|
+| 100 | 40 KB | 1.6 KB |
+| 1,000 | 4 MB | 16 KB |
+| 100,000 | 40 GB | 1.6 MB |
+| 1,000,000 | 4 TB | 16 MB |
+
+Beyond a few thousand instruments it is impractical to send and, once `m`
+exceeds the number of people, singular, so the 2SLS solve does not exist.
+The shared protocol is for the classical regime of tens to a few hundred
+selected, roughly independent instruments (the design note's own example
+was 115 x 115). With LD structure the blocks of a clumped panel could travel
+separately, and per-SNP `G'X`, `G'Y` with an external LD reference is the
+summary-statistics route this repo already has.
+
+Under the local-first-stage protocol what leaves a site is nine scalars at
+any `m`. The cost moves inside the site: the first stage `X ~ G` is not
+identified by ordinary least squares once `m` exceeds `n`, so the site
+would build `xhat` as a polygenic score with external or penalised weights
+(the `S = G w` construction in `../../indepth_reasoning.md`); the
+federation part is unchanged.
+
+The statistical limit arrives before the storage one: in the sweep, 100
+SNPs at about 2,750 people per site already gave a first-stage F of 4 and
+biased every one-sample route. Many weak instruments call for a score,
+cross-fitting or LIML-type methods, not a larger `A`.
+
 ## Seed sweep
 
 `scripts/fedmr_sweep.py` moves one design axis at a time away from the
