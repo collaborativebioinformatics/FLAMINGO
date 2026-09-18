@@ -460,11 +460,23 @@ with tab_experiments:
             # estimator against the truth. It is skipped further down so it is
             # not shown twice.
             hero = runner.hero_output(run_params, run_paths)
+            headline = []                      # (step, label) pairs shown up here, skipped below
             if hero:
                 hero_step, hero_label, hero_path = hero
                 output_block(hero_step, hero_label, hero_path, run_paths, level="###")
                 st.caption("Every estimator against the true curve, over the exposure "
                            "distribution the sites actually cover.")
+                headline.append((hero_step.key, hero_label))
+            # The forest plot is always the second figure: per-site estimates and the
+            # combined rows for every selected model. On linear and cox shapes it is
+            # already the headline figure.
+            forest_step = runner.STEPS["summary_mr"]
+            forest_path = forest_step.outputs(runner.full(run_params), run_paths).get("Forest plot")
+            if forest_path and forest_path.exists() and (forest_step.key, "Forest plot") not in headline:
+                output_block(forest_step, "Forest plot", forest_path, run_paths, level="###")
+                st.caption("Each site's own estimate, then the selected models over all sites.")
+                headline.append((forest_step.key, "Forest plot"))
+            if headline:
                 st.divider()
 
             st.subheader("Key results")
@@ -478,7 +490,7 @@ with tab_experiments:
 
             st.divider()
             st.subheader("All outputs")
-            skip = {(hero[0].key, hero[1])} if hero else set()
+            skip = set(headline)
             for step in steps:
                 if step.key == "simulate":
                     continue
